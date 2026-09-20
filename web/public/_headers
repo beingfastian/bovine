@@ -1,5 +1,8 @@
 # Cloudflare Pages / Netlify header rules.
 #
+# Vercel ignores this file entirely -- it reads vercel.json instead. The two
+# must be kept in step; they carry the same rules in different syntax.
+#
 # The model and the WASM runtime are the whole download budget: ~12.5 MB and
 # ~14 MB. Both live at versioned paths, so caching them forever is safe and is
 # the difference between a 25-second first visit and an instant second one.
