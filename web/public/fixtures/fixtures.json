@@ -1,0 +1,104 @@
+{
+  "modelVersion": "bi-lsd-mnv3l-v1.0.0",
+  "generatedBy": "ai/scripts/make_selftest_fixtures.py",
+  "note": "expectedProbability is the verified ONNX model's output in Python, using PIL bilinear resize to 224x224 on raw [0,255] RGB. The browser is expected to differ slightly because canvas resampling is not PIL; /selftest measures by how much.",
+  "tau": 0.5,
+  "fixtures": [
+    {
+      "file": "21f4d8625758e2a8.jpg",
+      "expectedProbability": 0.000293,
+      "label": 0,
+      "source": "mendeley",
+      "severity": "Normal",
+      "bytes": 23991
+    },
+    {
+      "file": "7e72c5bf1c8524dc.jpg",
+      "expectedProbability": 0.043356,
+      "label": 0,
+      "source": "mendeley",
+      "severity": "Normal",
+      "bytes": 20678
+    },
+    {
+      "file": "369e4c44699862c6.jpg",
+      "expectedProbability": 0.193874,
+      "label": 0,
+      "source": "mendeley",
+      "severity": "Normal",
+      "bytes": 24896
+    },
+    {
+      "file": "6c84026e4ee7845c.jpg",
+      "expectedProbability": 0.393088,
+      "label": 0,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 31120
+    },
+    {
+      "file": "8deb2fbcc1f53b62.jpg",
+      "expectedProbability": 0.48892,
+      "label": 1,
+      "source": "mendeley",
+      "severity": "Mild",
+      "bytes": 19080
+    },
+    {
+      "file": "6d4430bf658e7368.jpg",
+      "expectedProbability": 0.598167,
+      "label": 0,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 28538
+    },
+    {
+      "file": "524b8a098950c66f.jpg",
+      "expectedProbability": 0.766109,
+      "label": 0,
+      "source": "mendeley",
+      "severity": "Normal",
+      "bytes": 30109
+    },
+    {
+      "file": "11c87f7b706f07b4.jpg",
+      "expectedProbability": 0.898712,
+      "label": 1,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 35055
+    },
+    {
+      "file": "a25a09fc1846c7d2.jpg",
+      "expectedProbability": 0.959025,
+      "label": 1,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 33339
+    },
+    {
+      "file": "723a5d09991c0a84.jpg",
+      "expectedProbability": 0.983003,
+      "label": 1,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 32053
+    },
+    {
+      "file": "c6015d80072bc634.jpg",
+      "expectedProbability": 0.99383,
+      "label": 1,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 28385
+    },
+    {
+      "file": "d943f8a986412d96.jpg",
+      "expectedProbability": 0.999813,
+      "label": 1,
+      "source": "roboflow",
+      "severity": "",
+      "bytes": 37418
+    }
+  ]
+}

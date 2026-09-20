@@ -1,0 +1,29 @@
+{
+  "name": "bovineinsight-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "serve": "node scripts/serve-out.mjs 4173 out",
+    "test:parity": "node scripts/run-selftest.mjs http://127.0.0.1:4173",
+    "test:e2e": "node scripts/e2e-page.mjs http://127.0.0.1:4173",
+    "postinstall": "node scripts/copy-ort-wasm.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "^15.1.0",
+    "onnxruntime-web": "^1.20.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "puppeteer-core": "^25.11.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}

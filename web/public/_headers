@@ -1,0 +1,24 @@
+# Cloudflare Pages / Netlify header rules.
+#
+# The model and the WASM runtime are the whole download budget: ~12.5 MB and
+# ~14 MB. Both live at versioned paths, so caching them forever is safe and is
+# the difference between a 25-second first visit and an instant second one.
+
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/ort/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/fixtures/*
+  Cache-Control: public, max-age=86400
+
+# Deliberately short: retuning the operating point is meant to be a one-file
+# edit that reaches phones quickly, without rebuilding or redeploying the app.
+/thresholds.json
+  Cache-Control: public, max-age=300, must-revalidate
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), interest-cohort=()

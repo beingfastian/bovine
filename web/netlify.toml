@@ -1,0 +1,10 @@
+# Netlify deployment. Cloudflare Pages needs no file: set the build command to
+# `npm run build`, the publish directory to `web/out`, and add the two
+# NEXT_PUBLIC_SUPABASE_* variables in the dashboard.
+
+[build]
+  base    = "web"
+  command = "npm run build"
+  publish = "out"
+
+# public/_headers carries the cache rules and applies on both hosts.

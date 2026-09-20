@@ -1,0 +1,63 @@
+{
+  "baseline": {
+    "file": "bi-lsd-mnv3l-v1.0.0.onnx",
+    "bytes": 12467014,
+    "gzipBytes": 11531464,
+    "metrics": {
+      "balanced_accuracy": 0.9089718754484144,
+      "auc": 0.9657770124838571,
+      "recall": 0.9628712871287128,
+      "specificity": 0.855072463768116,
+      "tp": 389,
+      "tn": 177,
+      "fp": 30,
+      "fn": 15
+    }
+  },
+  "candidates": {
+    "fp16": {
+      "bytes": 6321421,
+      "gzipBytes": 5734211,
+      "metrics": {
+        "balanced_accuracy": 0.9089718754484144,
+        "auc": 0.9657530970488353,
+        "recall": 0.9628712871287128,
+        "specificity": 0.855072463768116,
+        "tp": 389,
+        "tn": 177,
+        "fp": 30,
+        "fn": 15
+      },
+      "decision_agreement_vs_fp32": 1.0,
+      "max_abs_diff_vs_fp32": 0.00883406400680542,
+      "mean_abs_diff_vs_fp32": 0.0008420181840219201,
+      "bal_acc_delta": 0.0
+    },
+    "int8": {
+      "bytes": 3825367,
+      "gzipBytes": 2917433,
+      "metrics": {
+        "balanced_accuracy": 0.7047759123738461,
+        "auc": 0.8715980293681542,
+        "recall": 0.9554455445544554,
+        "specificity": 0.45410628019323673,
+        "tp": 386,
+        "tn": 94,
+        "fp": 113,
+        "fn": 18
+      },
+      "decision_agreement_vs_fp32": 0.8101472995090017,
+      "max_abs_diff_vs_fp32": 0.8430714011192322,
+      "mean_abs_diff_vs_fp32": 0.19269445712591252,
+      "bal_acc_delta": -0.20419596307456833
+    }
+  },
+  "recommendation": "fp16",
+  "criteria": {
+    "decision_agreement_vs_fp32": ">= 0.99",
+    "recall": ">= fp32 recall - 0.01",
+    "balanced_accuracy_delta": "<= 0.01 absolute",
+    "size_saving": ">= 30% gzipped"
+  },
+  "shippedArtifact": "bi-lsd-mnv3l-v1.0.0.fp16.onnx"
+}

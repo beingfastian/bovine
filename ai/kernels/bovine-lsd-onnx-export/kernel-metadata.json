@@ -1,0 +1,16 @@
+{
+  "id": "hanzlaiqbal/bovine-lsd-onnx-export",
+  "title": "bovine-lsd-onnx-export",
+  "code_file": "bovine_lsd_onnx_export.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "hanzlaiqbal/bovine-lsd-model-v1",
+    "hanzlaiqbal/bovine-lsd-bundle"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

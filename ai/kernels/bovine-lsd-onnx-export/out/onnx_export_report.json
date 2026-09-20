@@ -1,0 +1,79 @@
+{
+  "modelVersion": "bi-lsd-mnv3l-v1.0.0",
+  "opset": 13,
+  "onnxSizeBytes": 12467014,
+  "inputName": "image",
+  "outputName": "output_0",
+  "inputContract": "raw [0,255] RGB, 1x224x224x3 NHWC float32",
+  "outputContract": "[1,1] float32, already a sigmoid probability",
+  "tau": 0.5,
+  "n": 611,
+  "attempts": [
+    {
+      "strategy": "A: tf2onnx --saved-model",
+      "returncode": 0,
+      "ok": true
+    }
+  ],
+  "versions": {
+    "tensorflow": "2.20.0",
+    "keras": "3.13.2",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.30.0"
+  },
+  "parity": {
+    "onnx_vs_tflite_max_abs_diff": 0.010795056819915771,
+    "onnx_vs_keras_max_abs_diff": 1.817941665649414e-06,
+    "keras_vs_tflite_max_abs_diff": 0.010795295238494873,
+    "onnx_vs_tflite_mean_abs_diff": 0.0012530614840573252,
+    "decision_agreement_onnx_tflite": 1.0,
+    "decision_agreement_onnx_keras": 1.0
+  },
+  "metrics_onnx": {
+    "accuracy": 0.9263502454991817,
+    "balanced_accuracy": 0.9089718754484144,
+    "auc": 0.9657770124838571,
+    "recall": 0.9628712871287128,
+    "specificity": 0.855072463768116,
+    "tp": 389,
+    "tn": 177,
+    "fp": 30,
+    "fn": 15
+  },
+  "metrics_tflite": {
+    "accuracy": 0.9263502454991817,
+    "balanced_accuracy": 0.9089718754484144,
+    "auc": 0.9657530970488353,
+    "recall": 0.9628712871287128,
+    "specificity": 0.855072463768116,
+    "tp": 389,
+    "tn": 177,
+    "fp": 30,
+    "fn": 15
+  },
+  "metrics_keras": {
+    "accuracy": 0.9263502454991817,
+    "balanced_accuracy": 0.9089718754484144,
+    "auc": 0.9657770124838571,
+    "recall": 0.9628712871287128,
+    "specificity": 0.855072463768116,
+    "tp": 389,
+    "tn": 177,
+    "fp": 30,
+    "fn": 15
+  },
+  "expected_from_model_card": {
+    "balanced_accuracy": 0.909,
+    "auc": 0.9653,
+    "tp": 389,
+    "tn": 177,
+    "fp": 30,
+    "fn": 15
+  },
+  "prob_distribution_onnx": {
+    "min": 0.0002925693988800049,
+    "median": 0.8987119197845459,
+    "max": 0.9998127222061157
+  },
+  "allChecksPassed": true
+}
