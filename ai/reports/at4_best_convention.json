@@ -1,0 +1,21 @@
+{
+  "convention": "/255",
+  "n": 1024,
+  "auc_asis": 0.3249492945326279,
+  "auc_inverted": 0.6750551146384479,
+  "polarity": "INVERTED (output ~ P(Normal))",
+  "best_balanced_acc": 0.6252733686067019,
+  "best_threshold": 0.32000000000000006,
+  "accuracy": 0.619140625,
+  "recall": 0.6419753086419753,
+  "specificity": 0.6085714285714285,
+  "tp": 208,
+  "tn": 426,
+  "fp": 274,
+  "fn": 116,
+  "n_exactly_zero": 7,
+  "n_exactly_one": 2,
+  "n_distinct": 1011,
+  "majority_baseline": 0.68359375,
+  "gate_pass": false
+}

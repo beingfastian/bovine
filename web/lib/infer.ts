@@ -1,5 +1,12 @@
 import type * as Ort from "onnxruntime-web/wasm";
-import { INPUT_SIZE, MODEL_URL, MODEL_VERSION } from "./model";
+import {
+  INPUT_SIZE,
+  MODEL_URL,
+  MODEL_VERSION,
+  OUTPUT_NAMES,
+  SPECIES_CLASSES,
+  type SpeciesProbs,
+} from "./model";
 import { ORT_VERSION } from "./ort-version";
 
 /**
@@ -41,6 +48,18 @@ export function loadSession(): Promise<Ort.InferenceSession> {
           graphOptimizationLevel: "all",
         })
       )
+      .then((session) => {
+        // Fail at load, loudly, rather than at the first photo, quietly.
+        const names = new Set(session.outputNames);
+        for (const want of Object.values(OUTPUT_NAMES)) {
+          if (!names.has(want)) {
+            throw new Error(
+              `model is missing output "${want}" (has ${[...names].join(", ")}) -- wrong artifact, or an export that did not rename its outputs`
+            );
+          }
+        }
+        return session;
+      })
       .catch((err) => {
         // Let the next attempt retry rather than caching a failure forever --
         // the usual cause is a dropped download, not a broken model.
@@ -52,10 +71,15 @@ export function loadSession(): Promise<Ort.InferenceSession> {
 }
 
 export interface InferenceResult {
-  /** P(lesion). The model's final op is a sigmoid, so this is ALREADY a
-   *  probability. Applying another sigmoid would squash it into [0.5, 0.73]
-   *  and silently invalidate tau. */
+  /** P(lesion). The model's final op on this path is a sigmoid, so this is
+   *  ALREADY a probability. Applying another sigmoid would squash it into
+   *  [0.5, 0.73] and silently invalidate tau. */
   probability: number;
+  /** Softmax over cattle / buffalo / other. Sums to 1. */
+  species: SpeciesProbs;
+  /** Mahalanobis d^2 from the bovine training distribution. Larger = less
+   *  like any animal photo the model was trained on. Unbounded above. */
+  ood: number;
   /** Wall-clock milliseconds for the forward pass alone. */
   latencyMs: number;
   modelVersion: string;
@@ -81,25 +105,36 @@ export async function runInference(
     3,
   ]);
 
-  // Read the names off the graph rather than hardcoding them, so a re-export
-  // that renames the signature cannot silently break inference.
-  const inputName = session.inputNames[0];
-  const outputName = session.outputNames[0];
-
   const t0 = performance.now();
-  const output = await session.run({ [inputName]: input });
+  const output = await session.run({ [session.inputNames[0]]: input });
   const latencyMs = performance.now() - t0;
 
-  const raw = output[outputName].data as Float32Array;
-  const probability = raw[0];
+  const probability = (output[OUTPUT_NAMES.lesion].data as Float32Array)[0];
+  const sp = output[OUTPUT_NAMES.species].data as Float32Array;
+  const ood = (output[OUTPUT_NAMES.ood].data as Float32Array)[0];
 
   if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
     throw new Error(
-      `model returned ${probability}, which is not a probability -- the graph or the input contract is wrong`
+      `lesion output ${probability} is not a probability -- the graph or the input contract is wrong`
     );
   }
+  const sum = sp[0] + sp[1] + sp[2];
+  if (sp.length !== 3 || !Number.isFinite(sum) || Math.abs(sum - 1) > 1e-3) {
+    throw new Error(
+      `species output ${Array.from(sp)} is not a 3-way softmax -- the graph or the input contract is wrong`
+    );
+  }
+  if (!Number.isFinite(ood) || ood < 0) {
+    throw new Error(`ood output ${ood} is not a squared distance`);
+  }
 
-  return { probability, latencyMs, modelVersion: MODEL_VERSION };
+  const species = {
+    [SPECIES_CLASSES[0]]: sp[0],
+    [SPECIES_CLASSES[1]]: sp[1],
+    [SPECIES_CLASSES[2]]: sp[2],
+  } as SpeciesProbs;
+
+  return { probability, species, ood, latencyMs, modelVersion: MODEL_VERSION };
 }
 
 /** Warm the session (downloads and compiles the graph) without scoring

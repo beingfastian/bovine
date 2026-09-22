@@ -1,0 +1,418 @@
+"""Step 2 — Deduplicate and build the training manifest.
+
+Runs on CPU. No GPU, no TensorFlow. Reads zips directly (no extraction needed).
+
+WHY THIS EXISTS
+---------------
+Improper splits inflate reported accuracy by 5-30% on medical image datasets
+(Nature Scientific Data, OCT study). The LSD literature shows exactly this
+signature: ConvNeXtLSD reports 98.29% on its test split but 88.31% under
+cross-validation. Near-duplicate images straddling train/test are the cause.
+
+This script finds them and assigns a group_id. Step 3 keeps every group whole
+on one side of the split.
+
+OUTPUT
+------
+ai/data/manifest.csv   path, label, source, sha256, phash, group_id
+ai/reports/dedupe.md   the numbers you report
+ai/reports/dupe_pairs/ sample matched pairs -- LOOK AT THESE to tune THRESH
+
+USAGE
+-----
+    python ai/scripts/dedupe.py
+    python ai/scripts/dedupe.py --thresh 3      # stricter
+    python ai/scripts/dedupe.py --thresh 8      # looser
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import io
+import os
+import re
+import zipfile
+from collections import defaultdict
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+
+try:
+    import imagehash
+except ImportError:
+    raise SystemExit("pip install imagehash")
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA = ROOT / "ai" / "data"
+REPORTS = ROOT / "ai" / "reports"
+
+IMG_EXT = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+
+# ---------------------------------------------------------------- sources
+# Add the Roboflow export here once you've downloaded it.
+# label: 1 = lesion/lumpy, 0 = normal/healthy, None = skip (OOD holdout)
+SOURCES = [
+    {
+        "name": "mendeley",
+        "path": DATA / "lumpy_skin_dataset.zip",
+        "rules": [("lumpy", 1), ("normal", 0)],
+    },
+    {
+        "name": "roboflow",
+        "path": DATA / "roboflow_cattle_disease",   # unzipped YOLO export dir
+        "format": "yolo",          # OBJECT DETECTION export, not classification
+        "rules": [
+            ("lumpy", 1),
+            ("normal_healthy_cow", 0),
+            # HELD OUT for the T6 OOD suite -- deliberately not trained on:
+            ("infected_foot", None),
+            ("mouth_disease", None),
+            ("normal_mouth", None),
+        ],
+    },
+]
+
+
+def load_overrides() -> dict:
+    """Manual label decisions, applied after loading. Decisions as data, not edits.
+
+    ai/data/label_overrides.csv:  match,action,label,reason
+      action=drop     -> exclude the image entirely
+      action=relabel  -> force the given label
+    Survives re-runs when new sources are added.
+    """
+    f = DATA / "label_overrides.csv"
+    if not f.exists():
+        return {}
+    out = {}
+    with open(f, encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            out[row["match"].strip()] = (
+                row["action"].strip(),
+                int(row["label"]) if row["label"].strip() else None,
+            )
+    return out
+
+
+def classify(name: str, rules) -> int | None:
+    """Map a path to a label using the first matching rule. None = skip."""
+    low = name.lower().replace(" ", "_").replace("-", "_")
+    for key, label in rules:
+        if key in low:
+            return label
+    return None
+
+
+def iter_source(src) -> list[tuple[str, bytes, int]]:
+    """Yield (display_path, raw_bytes, label) for one source."""
+    p: Path = src["path"]
+    out = []
+
+    if not p.exists():
+        print(f"  !! MISSING: {p}  (skipping)")
+        return out
+
+    if p.suffix == ".zip":
+        with zipfile.ZipFile(p) as zf:
+            for n in zf.namelist():
+                if n.endswith("/") or "__MACOSX" in n:
+                    continue
+                if not n.lower().endswith(IMG_EXT):
+                    continue
+                lab = classify(n, src["rules"])
+                if lab is None:
+                    continue
+                out.append((f"{p.name}::{n}", zf.read(n), lab))
+    else:
+        for f in p.rglob("*"):
+            if not f.is_file() or not f.suffix.lower() in IMG_EXT:
+                continue
+            lab = classify(str(f.relative_to(p)), src["rules"])
+            if lab is None:
+                continue
+            out.append((str(f.relative_to(ROOT)), f.read_bytes(), lab))
+
+    return out
+
+
+def iter_yolo_source(src) -> list[tuple[str, bytes, int]]:
+    """Read a Roboflow OBJECT-DETECTION export (YOLO folder structure).
+
+    Layout:
+        <root>/data.yaml            names: [class0, class1, ...]
+        <root>/{train,valid,test}/images/*.jpg
+        <root>/{train,valid,test}/labels/*.txt     "cls cx cy w h" per line
+
+    Image-level label is derived from the box classes present:
+      any box of a lesion class   -> 1
+      else any box of a normal class -> 0
+      else (foot/mouth only)      -> None  (held out for the T6 OOD suite)
+    """
+    root: Path = src["path"]
+    out = []
+    if not root.exists():
+        print(f"  !! MISSING: {root}  (skipping)")
+        return out
+
+    # class names from data.yaml (no yaml dep -- the names list is a single line)
+    yml = next(root.rglob("data.yaml"), None)
+    if yml is None:
+        print(f"  !! no data.yaml under {root} -- is this a YOLO export?")
+        return out
+    txt = yml.read_text(encoding="utf-8")
+    m = re.search(r"names:\s*\[(.*?)\]", txt, re.S)
+    if m:
+        names = [x.strip().strip("'\"") for x in m.group(1).split(",")]
+    else:  # block-list style
+        names = re.findall(r"^\s*-\s*(.+?)\s*$", txt.split("names:")[1], re.M)
+    print(f"  data.yaml classes: {names}")
+
+    n_skipped = 0
+    for img in root.rglob("images/*"):
+        if img.suffix.lower() not in IMG_EXT:
+            continue
+        lbl = img.parent.parent / "labels" / (img.stem + ".txt")
+        idxs = set()
+        if lbl.exists():
+            for line in lbl.read_text().splitlines():
+                if line.strip():
+                    idxs.add(int(line.split()[0]))
+        classes = {names[i] for i in idxs if i < len(names)}
+
+        label = None
+        for cname in classes:
+            mapped = classify(cname, src["rules"])
+            if mapped == 1:
+                label = 1
+                break
+            if mapped == 0 and label is None:
+                label = 0
+        if label is None:
+            n_skipped += 1
+            continue
+        out.append((str(img.relative_to(ROOT)), img.read_bytes(), label))
+
+    print(f"  held out (OOD suite / unlabelled): {n_skipped}")
+    return out
+
+
+def hamming_clusters(hashes: np.ndarray, thresh: int) -> list[list[int]]:
+    """Union-find over pairs whose Hamming distance <= thresh.
+
+    hashes: (N, 64) bool array. Chunked to stay memory-safe.
+    """
+    n = len(hashes)
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    CHUNK = 512
+    for i0 in range(0, n, CHUNK):
+        i1 = min(i0 + CHUNK, n)
+        # (chunk, N) Hamming distances
+        d = (hashes[i0:i1, None, :] != hashes[None, :, :]).sum(axis=2)
+        for i in range(i1 - i0):
+            for j in np.nonzero(d[i] <= thresh)[0]:
+                if j > i0 + i:                      # upper triangle only
+                    union(i0 + i, int(j))
+        print(f"\r  clustering {i1}/{n}", end="", flush=True)
+    print()
+
+    groups = defaultdict(list)
+    for i in range(n):
+        groups[find(i)].append(i)
+    return list(groups.values())
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--thresh", type=int, default=5,
+                    help="pHash Hamming distance for near-duplicates (default 5)")
+    ap.add_argument("--pairs", type=int, default=20,
+                    help="how many matched pairs to dump for eyeballing")
+    args = ap.parse_args()
+
+    DATA.mkdir(parents=True, exist_ok=True)
+    REPORTS.mkdir(parents=True, exist_ok=True)
+
+    # ---------------------------------------------------------- 1. load
+    print("STEP 2.1  loading sources")
+    records = []
+    for src in SOURCES:
+        items = (iter_yolo_source(src) if src.get("format") == "yolo"
+                 else iter_source(src))
+        print(f"  {src['name']:12} {len(items):5d} images")
+        for path, blob, lab in items:
+            records.append({"path": path, "label": lab, "source": src["name"], "blob": blob})
+
+    if not records:
+        raise SystemExit("no images found -- check SOURCES paths")
+
+    # ---- apply manual label decisions (see ai/data/label_overrides.csv) ----
+    ov = load_overrides()
+    if ov:
+        dropped = relabelled = 0
+        kept = []
+        for r in records:
+            base = r["path"].split("::")[-1].split("/")[-1]
+            act = ov.get(base)
+            if act is None:
+                kept.append(r); continue
+            action, lab = act
+            if action == "drop":
+                dropped += 1; continue
+            if action == "relabel":
+                if r["label"] != lab:
+                    relabelled += 1
+                r["label"] = lab
+            kept.append(r)
+        records = kept
+        print(f"  overrides: {dropped} dropped, {relabelled} relabelled "
+              f"({len(ov)} rules)")
+
+    n_raw = len(records)
+    print(f"  TOTAL RAW: {n_raw}  "
+          f"({sum(r['label'] for r in records)} lesion / "
+          f"{sum(1 - r['label'] for r in records)} normal)\n")
+
+    # ---------------------------------------------------------- 2. exact dupes
+    print("STEP 2.2  exact duplicates (SHA-256)")
+    by_sha = defaultdict(list)
+    for r in records:
+        r["sha256"] = hashlib.sha256(r["blob"]).hexdigest()
+        by_sha[r["sha256"]].append(r)
+
+    n_exact = sum(len(v) - 1 for v in by_sha.values() if len(v) > 1)
+    print(f"  exact duplicate files: {n_exact}")
+
+    # label conflicts: identical bytes, different label = a real data error
+    conflicts = [v for v in by_sha.values() if len({r["label"] for r in v}) > 1]
+    print(f"  !! CONFLICTING LABELS: {len(conflicts)} images")
+    for v in conflicts[:10]:
+        print("      " + " | ".join(f"{r['path'][-48:]} -> {r['label']}" for r in v))
+    if conflicts:
+        print("      ^ investigate these by eye. Do NOT silently drop them.")
+
+    uniq = [v[0] for v in by_sha.values()]
+    print(f"  after exact dedupe: {len(uniq)}\n")
+
+    # ---------------------------------------------------------- 3. near dupes
+    print(f"STEP 2.3  near-duplicates (pHash, Hamming <= {args.thresh})")
+    bits, keep = [], []
+    for k, r in enumerate(uniq, 1):
+        try:
+            im = Image.open(io.BytesIO(r["blob"]))
+            h = imagehash.phash(im)
+        except Exception as e:
+            print(f"\n  unreadable, skipped: {r['path']} ({e})")
+            continue
+        r["phash"] = str(h)
+        bits.append(h.hash.flatten())
+        keep.append(r)
+        if k % 200 == 0:
+            print(f"\r  hashing {k}/{len(uniq)}", end="", flush=True)
+    print()
+
+    bits = np.array(bits, dtype=bool)
+    clusters = hamming_clusters(bits, args.thresh)
+
+    multi = [c for c in clusters if len(c) > 1]
+    in_cluster = sum(len(c) for c in multi)
+    print(f"  near-duplicate clusters: {len(multi)}")
+    print(f"  images inside a cluster: {in_cluster}")
+    print(f"  collapsed away:          {in_cluster - len(multi)}")
+
+    for gid, members in enumerate(clusters):
+        for i in members:
+            keep[i]["group_id"] = gid
+
+    n_groups = len(clusters)
+    print(f"\n  >>> TRUE DATASET SIZE: {n_groups} groups "
+          f"(not {n_raw} files) <<<\n")
+
+    # ---------------------------------------------------------- 4. sample pairs
+    outdir = REPORTS / "dupe_pairs"
+    outdir.mkdir(exist_ok=True)
+    for f in outdir.glob("*.png"):
+        f.unlink()
+    shown = 0
+    for c in multi:
+        if shown >= args.pairs:
+            break
+        a, b = keep[c[0]], keep[c[1]]
+        try:
+            ia = Image.open(io.BytesIO(a["blob"])).convert("RGB").resize((224, 224))
+            ib = Image.open(io.BytesIO(b["blob"])).convert("RGB").resize((224, 224))
+        except Exception:
+            continue
+        sheet = Image.new("RGB", (452, 224), "white")
+        sheet.paste(ia, (0, 0)); sheet.paste(ib, (228, 0))
+        same = "SAMELABEL" if a["label"] == b["label"] else "DIFFLABEL"
+        sheet.save(outdir / f"pair_{shown:02d}_{same}.png")
+        shown += 1
+    print(f"STEP 2.4  wrote {shown} sample pairs -> {outdir}")
+    print("  >>> OPEN THESE. If they show DIFFERENT animals, lower --thresh to 3.")
+    print("  >>> If obvious re-crops survive as separate groups, raise to 8.\n")
+
+    # ---------------------------------------------------------- 5. manifest
+    man = DATA / "manifest.csv"
+    with open(man, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["path", "label", "source", "sha256", "phash", "group_id"])
+        for r in keep:
+            w.writerow([r["path"], r["label"], r["source"],
+                        r["sha256"], r["phash"], r["group_id"]])
+    print(f"wrote {man}  ({len(keep)} rows)")
+
+    # per-group label purity: a group with mixed labels is a problem
+    gl = defaultdict(set)
+    for r in keep:
+        gl[r["group_id"]].add(r["label"])
+    impure = [g for g, ls in gl.items() if len(ls) > 1]
+    print(f"groups with MIXED labels: {len(impure)}  "
+          f"(near-identical images labelled both ways -- inspect)")
+
+    # ---------------------------------------------------------- 6. report
+    lesion_g = len({r["group_id"] for r in keep if r["label"] == 1})
+    normal_g = len({r["group_id"] for r in keep if r["label"] == 0})
+    rep = f"""# Step 2 — Deduplication Report
+
+**pHash threshold:** {args.thresh} (Hamming)
+
+| Metric | Value |
+|---|---|
+| Raw image files | {n_raw} |
+| Exact duplicates (SHA-256) | {n_exact} |
+| Images with conflicting labels | {len(conflicts)} |
+| After exact dedupe | {len(uniq)} |
+| Near-duplicate clusters | {len(multi)} |
+| Images inside a cluster | {in_cluster} |
+| **TRUE dataset size (groups)** | **{n_groups}** |
+| Lesion groups | {lesion_g} |
+| Normal groups | {normal_g} |
+| Groups with mixed labels | {len(impure)} |
+
+**Shrinkage:** {n_raw} files -> {n_groups} groups ({100 * (1 - n_groups / n_raw):.1f}% collapsed).
+
+Report `{n_groups}` as the dataset size. Never the file count.
+
+`group_id` in `ai/data/manifest.csv` must be passed to `StratifiedGroupKFold`
+as the `groups=` argument in Step 3. An entire group goes to exactly one fold.
+"""
+    (REPORTS / "dedupe.md").write_text(rep, encoding="utf-8")
+    print(f"wrote {REPORTS / 'dedupe.md'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LimitsBanner } from "./components/LimitsBanner";
 import { ResultCard } from "./components/ResultCard";
-import { SubmitPanel } from "./components/SubmitPanel";
+import { SaveStatus, type SaveState } from "./components/SaveStatus";
 import {
   LabelChips,
   type LumpsAnswer,
@@ -13,12 +13,15 @@ import {
   DEFAULT_THRESHOLDS,
   MODEL_VERSION,
   loadThresholds,
+  type SpeciesProbs,
   type Thresholds,
 } from "@/lib/model";
 import { decodeImage, makeUploadJpeg, prepareImage } from "@/lib/preprocess";
 import { runInference, warmUp } from "@/lib/infer";
 import { assessQuality, type QualityReport } from "@/lib/quality";
 import { decide, type VerdictResult } from "@/lib/verdict";
+import { saveLabel, saveScreening } from "@/lib/submit";
+import { SUPABASE_CONFIGURED } from "@/lib/supabase";
 
 /**
  * Ask for the human label BEFORE revealing the model's verdict.
@@ -33,14 +36,17 @@ import { decide, type VerdictResult } from "@/lib/verdict";
  */
 const ASK_BEFORE_REVEAL = true;
 
-type Stage = "idle" | "working" | "labelling" | "done" | "error";
+type Stage = "idle" | "working" | "rejected" | "labelling" | "done" | "error";
 
 interface Shot {
+  id: string;
   previewUrl: string;
   uploadBlob: Blob;
   width: number;
   height: number;
   probability: number;
+  species: SpeciesProbs;
+  ood: number;
   latencyMs: number;
   quality: QualityReport;
   verdict: VerdictResult;
@@ -54,15 +60,27 @@ export default function Page() {
   const [shot, setShot] = useState<Shot | null>(null);
   const [species, setSpecies] = useState<Species | null>(null);
   const [lumps, setLumps] = useState<LumpsAnswer | null>(null);
+  const [animalConfirmed, setAnimalConfirmed] = useState<boolean | null>(null);
   const [thresholds, setThresholds] = useState<Thresholds | null>(null);
   const [modelReady, setModelReady] = useState(false);
+
+  const [photoSave, setPhotoSave] = useState<SaveState>(
+    SUPABASE_CONFIGURED ? "idle" : "unconfigured"
+  );
+  const [answerSave, setAnswerSave] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const previewUrlRef = useRef<string | null>(null);
+  // The label insert has a foreign key to the screening row, so it must wait
+  // for the photo save to finish -- on a slow connection the person can
+  // easily answer before a 200 kB upload completes.
+  const photoSaveRef = useRef<Promise<boolean> | null>(null);
+  const lastLabelRef = useRef<string>("");
 
   // Start downloading the model and config the moment the page opens, so the
-  // 12 MB is already in flight while the user is still reading the banner.
+  // 6 MB is already in flight while the user is still reading the banner.
   useEffect(() => {
     loadThresholds().then(setThresholds);
     warmUp()
@@ -76,12 +94,72 @@ export default function Page() {
     };
   }, []);
 
+  const startPhotoSave = useCallback(
+    (s: Shot, t: Thresholds) => {
+      if (!SUPABASE_CONFIGURED) return;
+      setPhotoSave("saving");
+      setSaveError(null);
+      photoSaveRef.current = saveScreening({
+        id: s.id,
+        image: s.uploadBlob,
+        imageWidth: s.width,
+        imageHeight: s.height,
+        capturedAt: s.capturedAt,
+        probability: s.probability,
+        species: s.species,
+        ood: s.ood,
+        latencyMs: s.latencyMs,
+        quality: s.quality,
+        verdict: s.verdict,
+        thresholds: t,
+      }).then((r) => {
+        setPhotoSave(r.ok ? "saved" : "failed");
+        if (!r.ok) setSaveError(r.error ?? "Unknown error");
+        return r.ok;
+      });
+    },
+    []
+  );
+
+  const startLabelSave = useCallback(
+    async (s: Shot, sp: Species, lu: LumpsAnswer) => {
+      if (!SUPABASE_CONFIGURED) return;
+      const key = `${sp}|${lu}`;
+      if (key === lastLabelRef.current) return; // same answer, nothing new to say
+      lastLabelRef.current = key;
+
+      setAnswerSave("saving");
+      const photoOk = photoSaveRef.current ? await photoSaveRef.current : false;
+      if (!photoOk) {
+        // No row to attach to. The photo-save failure is already on screen.
+        setAnswerSave("failed");
+        return;
+      }
+      const r = await saveLabel({
+        screeningId: s.id,
+        species: sp,
+        lumps: lu,
+        speciesChanged:
+          s.verdict.detectedSpecies !== "other" &&
+          s.verdict.detectedSpecies !== sp,
+      });
+      setAnswerSave(r.ok ? "saved" : "failed");
+      if (!r.ok) setSaveError(r.error ?? "Unknown error");
+    },
+    []
+  );
+
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
       setStage("working");
       setSpecies(null);
       setLumps(null);
+      setAnimalConfirmed(null);
+      setAnswerSave("idle");
+      setSaveError(null);
+      lastLabelRef.current = "";
+      photoSaveRef.current = null;
 
       try {
         const t = thresholds ?? (await loadThresholds());
@@ -97,26 +175,47 @@ export default function Page() {
         const uploadBlob = await makeUploadJpeg(bitmap, srcWidth, srcHeight);
         bitmap.close();
 
-        setStatusText(modelReady ? "Checking the skin…" : "Loading the model…");
+        setStatusText(modelReady ? "Checking the photo…" : "Loading the model…");
         const inference = await runInference(prepared.tensor);
 
         if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
         const previewUrl = URL.createObjectURL(uploadBlob);
         previewUrlRef.current = previewUrl;
 
-        setShot({
+        const verdict = decide(
+          inference.probability,
+          inference.species,
+          inference.ood,
+          quality,
+          t
+        );
+        const s: Shot = {
+          id: crypto.randomUUID(),
           previewUrl,
           uploadBlob,
           width: srcWidth,
           height: srcHeight,
           probability: inference.probability,
+          species: inference.species,
+          ood: inference.ood,
           latencyMs: inference.latencyMs,
           quality,
-          verdict: decide(inference.probability, quality, t),
+          verdict,
           capturedAt: new Date().toISOString(),
-        });
+        };
+        setShot(s);
         setModelReady(true);
-        setStage(ASK_BEFORE_REVEAL ? "labelling" : "done");
+
+        // Save the moment we have a result. Not gated on any answer.
+        startPhotoSave(s, t);
+
+        if (verdict.reason === "no_animal") {
+          setStage("rejected");
+        } else {
+          // Pre-fill species from the detector; the person only taps if wrong.
+          setSpecies(verdict.detectedSpecies === "buffalo" ? "buffalo" : "cattle");
+          setStage(ASK_BEFORE_REVEAL ? "labelling" : "done");
+        }
       } catch (e) {
         console.error(e);
         setError(e instanceof Error ? e.message : String(e));
@@ -125,7 +224,7 @@ export default function Page() {
         setStatusText("");
       }
     },
-    [thresholds, modelReady]
+    [thresholds, modelReady, startPhotoSave]
   );
 
   const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,12 +239,42 @@ export default function Page() {
     setShot(null);
     setSpecies(null);
     setLumps(null);
+    setAnimalConfirmed(null);
     setError(null);
+    setPhotoSave(SUPABASE_CONFIGURED ? "idle" : "unconfigured");
+    setAnswerSave("idle");
+    setSaveError(null);
+  };
+
+  const retrySave = () => {
+    if (!shot) return;
+    const t = thresholds ?? DEFAULT_THRESHOLDS;
+    if (photoSave === "failed") startPhotoSave(shot, t);
+    if (species && lumps) {
+      lastLabelRef.current = "";
+      void startLabelSave(shot, species, lumps);
+    }
+  };
+
+  const reveal = () => {
+    if (!shot || !species || !lumps) return;
+    setStage("done");
+    void startLabelSave(shot, species, lumps);
+  };
+
+  // After the reveal, an edited answer is saved again; newest wins.
+  const changeSpecies = (sp: Species) => {
+    setSpecies(sp);
+    if (stage === "done" && shot && lumps) void startLabelSave(shot, sp, lumps);
+  };
+  const changeLumps = (lu: LumpsAnswer) => {
+    setLumps(lu);
+    if (stage === "done" && shot && species) void startLabelSave(shot, species, lu);
   };
 
   return (
     <main className="mx-auto w-full max-w-md px-4 pb-16 pt-6">
-      <header className="mb-4">
+      <header className="mb-3">
         <h1 className="text-xl font-semibold tracking-tight">
           BovineInsight — skin check
         </h1>
@@ -153,6 +282,20 @@ export default function Page() {
           جانور کی جلد کی جانچ
         </p>
       </header>
+
+      {/* Saving is automatic, so this has to be said up front, every time,
+          not buried behind a button that no longer exists. */}
+      <p
+        className="mb-3 rounded-lg px-3 py-2 text-[12px]"
+        style={{ background: "var(--card)", color: "var(--muted)" }}
+      >
+        Photos you check here are saved to improve the tool. No name, phone
+        number or location is stored.
+        <span className="ur block text-[13px]">
+          یہاں جانچی گئی تصاویر ٹول کو بہتر بنانے کے لیے محفوظ ہوتی ہیں۔ نام، فون
+          نمبر یا مقام محفوظ نہیں ہوتا۔
+        </span>
+      </p>
 
       <LimitsBanner species={species} />
 
@@ -175,11 +318,12 @@ export default function Page() {
       {stage === "idle" && (
         <section className="mt-5 space-y-3">
           <p className="text-[15px]" style={{ color: "var(--muted)" }}>
-            Take a clear photo of the animal&apos;s skin, close enough to see
-            individual lumps.
+            Photograph the animal so its body fills most of the frame, close
+            enough to see individual lumps.
           </p>
           <p className="ur text-[15px]" style={{ color: "var(--muted)" }}>
-            جانور کی جلد کی صاف تصویر لیں، اتنے قریب سے کہ گلٹیاں نظر آئیں۔
+            جانور کی تصویر اس طرح لیں کہ اس کا جسم تصویر کا بڑا حصہ ہو، اتنے
+            قریب سے کہ گلٹیاں نظر آئیں۔
           </p>
 
           <button
@@ -201,8 +345,8 @@ export default function Page() {
 
           <p className="text-[12px]" style={{ color: "var(--muted)" }}>
             {modelReady
-              ? "Ready — the photo never leaves your phone until you choose to send it."
-              : "Loading the model (about 12 MB, once)…"}
+              ? "Ready."
+              : "Loading the model (about 6 MB, once)…"}
           </p>
         </section>
       )}
@@ -242,7 +386,7 @@ export default function Page() {
         </section>
       )}
 
-      {shot && (stage === "labelling" || stage === "done") && (
+      {shot && (stage === "rejected" || stage === "labelling" || stage === "done") && (
         <section className="mt-5 space-y-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -251,6 +395,82 @@ export default function Page() {
             className="w-full rounded-xl"
             style={{ border: "1px solid var(--line)" }}
           />
+
+          {stage === "rejected" && (
+            <>
+              <ResultCard result={shot.verdict} />
+
+              {/* A wrongly rejected real animal is the worst outcome for a
+                  data-collection app. One tap turns it into a labelled example
+                  of the gate being wrong instead of a lost photo. */}
+              <div
+                className="rounded-xl px-4 py-3"
+                style={{ background: "var(--card)" }}
+              >
+                <p className="text-[15px] font-medium">
+                  Is there actually a cattle or buffalo in this photo?
+                </p>
+                <p className="ur text-[14px]" style={{ color: "var(--muted)" }}>
+                  کیا اس تصویر میں واقعی گائے یا بھینس ہے؟
+                </p>
+                <div className="mt-2 flex gap-2">
+                  {(
+                    [
+                      [true, "Yes", "ہاں"],
+                      [false, "No", "نہیں"],
+                    ] as [boolean, string, string][]
+                  ).map(([v, en, ur]) => (
+                    <button
+                      key={en}
+                      type="button"
+                      aria-pressed={animalConfirmed === v}
+                      onClick={() => setAnimalConfirmed(v)}
+                      className="tap rounded-full border px-5 text-[15px] font-medium"
+                      style={{
+                        borderColor: animalConfirmed === v ? "var(--accent)" : "var(--line)",
+                        background: animalConfirmed === v ? "var(--accent)" : "transparent",
+                        color: animalConfirmed === v ? "var(--bg)" : "var(--fg)",
+                      }}
+                    >
+                      {en} <span className="ur ml-2 opacity-80">{ur}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {animalConfirmed === true && (
+                <>
+                  <LabelChips
+                    species={species}
+                    lumps={lumps}
+                    onSpecies={(sp) => {
+                      setSpecies(sp);
+                      if (lumps) void startLabelSave(shot, sp, lumps);
+                    }}
+                    onLumps={(lu) => {
+                      setLumps(lu);
+                      if (species) void startLabelSave(shot, species, lu);
+                    }}
+                  />
+                  <p className="text-[13px]" style={{ color: "var(--muted)" }}>
+                    Thank you — this tells us the check was wrong, which is
+                    exactly what we need to fix it.
+                  </p>
+                </>
+              )}
+
+              <SaveStatus photo={photoSave} answer={answerSave} error={saveError} onRetry={retrySave} />
+
+              <button
+                type="button"
+                onClick={reset}
+                className="tap w-full rounded-xl px-5 text-[17px] font-semibold"
+                style={{ background: "var(--accent)", color: "var(--bg)" }}
+              >
+                Try another photo · دوبارہ تصویر لیں
+              </button>
+            </>
+          )}
 
           {stage === "labelling" && (
             <>
@@ -273,19 +493,26 @@ export default function Page() {
               <LabelChips
                 species={species}
                 lumps={lumps}
-                onSpecies={setSpecies}
-                onLumps={setLumps}
+                detectedSpecies={
+                  shot.verdict.detectedSpecies === "other"
+                    ? null
+                    : shot.verdict.detectedSpecies
+                }
+                onSpecies={changeSpecies}
+                onLumps={changeLumps}
               />
 
               <button
                 type="button"
                 disabled={!species || !lumps}
-                onClick={() => setStage("done")}
+                onClick={reveal}
                 className="tap w-full rounded-xl px-5 text-[17px] font-semibold disabled:opacity-40"
                 style={{ background: "var(--accent)", color: "var(--bg)" }}
               >
                 Show the result · نتیجہ دکھائیں
               </button>
+
+              <SaveStatus photo={photoSave} answer={answerSave} error={saveError} onRetry={retrySave} />
             </>
           )}
 
@@ -296,30 +523,16 @@ export default function Page() {
               <LabelChips
                 species={species}
                 lumps={lumps}
-                onSpecies={setSpecies}
-                onLumps={setLumps}
+                detectedSpecies={
+                  shot.verdict.detectedSpecies === "other"
+                    ? null
+                    : shot.verdict.detectedSpecies
+                }
+                onSpecies={changeSpecies}
+                onLumps={changeLumps}
               />
 
-              {species && lumps && (
-                <SubmitPanel
-                  // Remounts when a label changes, so an edited answer cannot
-                  // leave a "Sent" confirmation standing over stale values.
-                  key={`${species}-${lumps}`}
-                  payload={{
-                    image: shot.uploadBlob,
-                    imageWidth: shot.width,
-                    imageHeight: shot.height,
-                    capturedAt: shot.capturedAt,
-                    probability: shot.probability,
-                    latencyMs: shot.latencyMs,
-                    quality: shot.quality,
-                    verdict: shot.verdict,
-                    thresholds: thresholds ?? DEFAULT_THRESHOLDS,
-                    species,
-                    lumps,
-                  }}
-                />
-              )}
+              <SaveStatus photo={photoSave} answer={answerSave} error={saveError} onRetry={retrySave} />
 
               <TechnicalPanel shot={shot} thresholds={thresholds} />
 
@@ -352,24 +565,31 @@ function TechnicalPanel({
   thresholds: Thresholds | null;
 }) {
   const [open, setOpen] = useState(false);
+  const t = thresholds ?? DEFAULT_THRESHOLDS;
   const rows: [string, string][] = [
     ["raw score p(lesion)", shot.probability.toFixed(4)],
-    ["threshold tau", (thresholds?.tau ?? 0.5).toFixed(2)],
-    [
-      "unclear band",
-      `[${(thresholds?.unclearLow ?? 0.4).toFixed(2)}, ${(
-        thresholds?.unclearHigh ?? 0.6
-      ).toFixed(2)})`,
-    ],
+    ["threshold tau", t.tau.toFixed(2)],
+    ["unclear band", `[${t.unclearLow.toFixed(2)}, ${t.unclearHigh.toFixed(2)})`],
     ["verdict", shot.verdict.verdict],
     ["abstain reason", shot.verdict.reason ?? "—"],
+    [
+      "species p(cattle/buffalo/other)",
+      `${shot.species.cattle.toFixed(3)} / ${shot.species.buffalo.toFixed(3)} / ${shot.species.other.toFixed(3)}`,
+    ],
+    ["detected", shot.verdict.detectedSpecies],
+    ["ood d² (Mahalanobis)", shot.ood.toFixed(1)],
+    ["gate oodMax / otherMax", `${t.oodMax >= 1e8 ? "off" : t.oodMax.toFixed(1)} / ${t.otherMax.toFixed(2)}`],
+    ["gate failed by", shot.verdict.gateFailedBy.join("+") || "—"],
     ["blur variance", shot.quality.blurVariance.toFixed(1)],
-    ["dark / bright frac", `${shot.quality.darkFraction.toFixed(3)} / ${shot.quality.brightFraction.toFixed(3)}`],
-    ["mean luma", shot.quality.meanLuma.toFixed(1)],
+    [
+      "dark / bright frac",
+      `${shot.quality.darkFraction.toFixed(3)} / ${shot.quality.brightFraction.toFixed(3)}`,
+    ],
     ["inference", `${shot.latencyMs.toFixed(0)} ms`],
     ["source image", `${shot.width}×${shot.height}`],
     ["model", MODEL_VERSION],
-    ["thresholds", thresholds?.thresholdsVersion ?? "defaults"],
+    ["thresholds", t.thresholdsVersion],
+    ["screening id", shot.id.slice(0, 8)],
   ];
 
   return (

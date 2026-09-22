@@ -1,0 +1,175 @@
+{
+  "modelVersion": "bi-lsd-mnv3l-v1.0.0-gate",
+  "reconstructed_from": "ai/kernels/bovine-lsd-gate/out/progress.txt (kernel v5); the kernel's own json.dump failed on a name collision after every computation had finished",
+  "absent_stdout_only": [
+    "ood.sweep (D per keep level -- recomputed locally by verify_gate.py)",
+    "head.softmax_only_sweep",
+    "combined_sweep.novel_by_source"
+  ],
+  "outputs": [
+    "lesion",
+    "species",
+    "ood"
+  ],
+  "data": {
+    "n_items_featurised": 16497,
+    "feature_extraction_seconds": 258,
+    "ood_fit_n_bovine_train": 2661,
+    "in_domain_other_heldout_n": 1301,
+    "novel_n": 6588,
+    "novel_sources": [
+      "intel scenes (buildings, forest, glacier, mountain, sea, street)",
+      "LFW faces",
+      "Caltech-101 classes never trained on (every third class)"
+    ]
+  },
+  "lesion_model_on_nonanimals_before_gate": {
+    "in_domain_heldout": {
+      "n": 1301,
+      "flagged_rate": 0.23600000000000002
+    },
+    "novel": {
+      "n": 6588,
+      "flagged_rate": 0.122
+    }
+  },
+  "head": {
+    "training": {
+      "epochs": 26,
+      "val_acc": 0.9874
+    },
+    "heldout_accuracy": {
+      "cattle": 0.9852700490998363,
+      "buffalo": 1.0,
+      "other": 0.9884704073789393
+    },
+    "confusion": [
+      [
+        602,
+        2,
+        7
+      ],
+      [
+        0,
+        81,
+        0
+      ],
+      [
+        14,
+        1,
+        1286
+      ]
+    ],
+    "species": {
+      "overall_acc": 0.9971098265895953,
+      "cattle_as_cattle": 0.9967266775777414,
+      "buffalo_as_buffalo": 1.0,
+      "per_breed": {
+        "Khundi": {
+          "n": 19,
+          "acc": 1.0
+        },
+        "Mix": {
+          "n": 34,
+          "acc": 1.0
+        },
+        "Neli Ravi": {
+          "n": 28,
+          "acc": 1.0
+        }
+      }
+    }
+  },
+  "ood": {
+    "k": 384,
+    "k_candidates": {
+      "64": {
+        "auroc_other_test_vs_bovine_test": 0.7798,
+        "median_d2": {
+          "bovine_test": 53.9,
+          "other_test": 74.7,
+          "novel": 71.4
+        }
+      },
+      "128": {
+        "auroc_other_test_vs_bovine_test": 0.8513,
+        "median_d2": {
+          "bovine_test": 105.1,
+          "other_test": 165.6,
+          "novel": 157.8
+        }
+      },
+      "192": {
+        "auroc_other_test_vs_bovine_test": 0.9,
+        "median_d2": {
+          "bovine_test": 154.6,
+          "other_test": 276.4,
+          "novel": 259.5
+        }
+      },
+      "256": {
+        "auroc_other_test_vs_bovine_test": 0.9304,
+        "median_d2": {
+          "bovine_test": 205.4,
+          "other_test": 406.1,
+          "novel": 368.8
+        }
+      },
+      "384": {
+        "auroc_other_test_vs_bovine_test": 0.9561,
+        "median_d2": {
+          "bovine_test": 307.6,
+          "other_test": 703.1,
+          "novel": 618.2
+        }
+      }
+    },
+    "in_graph_vs_numpy_rel_err": 1.21e-07
+  },
+  "verification": {
+    "lesion": {
+      "fp32_vs_keras_max_abs_diff": 2.7120113372802734e-06,
+      "fp16_vs_fp32_max_abs_diff": 0.00883406400680542,
+      "fp16_decision_agreement": 1.0,
+      "test_metrics_fp32": {
+        "balanced_accuracy": 0.9089718754484144,
+        "tp": 389,
+        "tn": 177,
+        "fp": 30,
+        "fn": 15
+      },
+      "test_metrics_fp16": {
+        "balanced_accuracy": 0.9089718754484144,
+        "tp": 389,
+        "tn": 177,
+        "fp": 30,
+        "fn": 15
+      }
+    },
+    "ood": {
+      "fp32_vs_numpy_max_rel_err": 2.969421683728807e-06,
+      "fp16_vs_fp32_max_rel_err": 0.015905300010346762,
+      "fp16_vs_fp32_gate_agreement_at_D": {
+        "0.98": 0.9983633387888707,
+        "0.99": 1.0,
+        "0.995": 0.9983633387888707,
+        "0.999": 1.0
+      }
+    },
+    "species_cattle_test": {
+      "fp16_vs_fp32_argmax_agreement": 1.0,
+      "onnx_vs_keras_max_abs_diff": 2.6226043701171875e-06
+    },
+    "novel_rejected_fp16_combined": {
+      "keep0.98_T0.7": 0.8574681238615665,
+      "keep0.99_T0.7": 0.8372799028536734,
+      "keep0.995_T0.7": 0.8257437765634487,
+      "keep0.999_T0.7": 0.8006982392228293
+    }
+  },
+  "verification_complete": true,
+  "sizes_mb": {
+    "fp32": 14.55,
+    "fp16": 7.36
+  }
+}

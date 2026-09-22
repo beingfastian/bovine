@@ -12,8 +12,11 @@ import { BUCKET, SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
  * though they can write to it. Photos come back as short-lived signed URLs
  * rather than public links, so the bucket never has to be made public.
  *
- * The summary at the top is the number that matters. Cattle accuracy is
- * already measured; what nobody has is buffalo with confirmed lesions.
+ * Reads the `screenings_with_labels` view (migration 002): each screening
+ * joined to the person's newest answer, with `species_final` = their answer
+ * if given, else the detector's. The summary at the top is the number that
+ * matters -- cattle accuracy is already measured; what nobody has is buffalo
+ * with confirmed lesions.
  */
 
 interface Row {
@@ -28,14 +31,48 @@ interface Row {
   abstain_reason: string | null;
   inference_ms: number | null;
   blur_variance: number | null;
-  species: "cattle" | "buffalo";
-  reported_lumps: "yes" | "no" | "not_sure";
   model_version: string;
+  // gate / detector
+  animal_present: boolean | null;
+  detected_species: "cattle" | "buffalo" | "other" | null;
+  p_cattle: number | null;
+  p_buffalo: number | null;
+  p_other: number | null;
+  // person's answer (newest), via the view
+  label_species: "cattle" | "buffalo" | null;
+  label_lumps: "yes" | "no" | "not_sure" | null;
+  label_species_changed: boolean | null;
+  labelled_at: string | null;
+  species_final: "cattle" | "buffalo" | null;
   vet_verdict: string | null;
   reviewer_note: string | null;
 }
 
-type Filter = "all" | "buffalo_lumps" | "disagreements" | "unclear";
+type Filter =
+  | "all"
+  | "buffalo_lumps"
+  | "disagreements"
+  | "unclear"
+  | "rejected"
+  | "overrides"
+  | "unlabelled";
+
+const FILTERS: [Filter, string][] = [
+  ["all", "All"],
+  ["buffalo_lumps", "Buffalo with lumps"],
+  ["disagreements", "Person ≠ model"],
+  ["unclear", "Unclear"],
+  ["rejected", "Not an animal"],
+  ["overrides", "Species overridden"],
+  ["unlabelled", "No answer"],
+];
+
+function disagrees(r: Row) {
+  return (
+    (r.label_lumps === "yes" && r.verdict === "no_obvious_lesion") ||
+    (r.label_lumps === "no" && r.verdict === "possible_condition")
+  );
+}
 
 export default function ReviewPage() {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -79,13 +116,18 @@ export default function ReviewPage() {
     setError(null);
 
     const { data, error: err } = await supabase
-      .from("screenings")
+      .from("screenings_with_labels")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(300);
+      .limit(500);
 
     if (err) {
-      setError(err.message);
+      setError(
+        err.message +
+          (err.message.includes("screenings_with_labels")
+            ? " — run supabase/migrations/002_gate_species_autosave.sql"
+            : "")
+      );
       setLoading(false);
       return;
     }
@@ -114,33 +156,34 @@ export default function ReviewPage() {
 
   const summary = useMemo(() => {
     const cell = (sp: string, lu: string) =>
-      rows.filter((r) => r.species === sp && r.reported_lumps === lu).length;
+      rows.filter((r) => r.species_final === sp && r.label_lumps === lu).length;
     return {
       total: rows.length,
       cattleYes: cell("cattle", "yes"),
       cattleNo: cell("cattle", "no"),
       buffaloYes: cell("buffalo", "yes"),
       buffaloNo: cell("buffalo", "no"),
-      notSure: rows.filter((r) => r.reported_lumps === "not_sure").length,
+      rejected: rows.filter((r) => r.animal_present === false).length,
       unclear: rows.filter((r) => r.verdict === "unclear").length,
+      unlabelled: rows.filter((r) => r.animal_present !== false && !r.label_lumps).length,
+      overrides: rows.filter((r) => r.label_species_changed).length,
     };
   }, [rows]);
 
   const visible = useMemo(() => {
     switch (filter) {
       case "buffalo_lumps":
-        return rows.filter(
-          (r) => r.species === "buffalo" && r.reported_lumps === "yes"
-        );
+        return rows.filter((r) => r.species_final === "buffalo" && r.label_lumps === "yes");
       case "disagreements":
-        // Where the person and the model actually contradict each other.
-        return rows.filter(
-          (r) =>
-            (r.reported_lumps === "yes" && r.verdict === "no_obvious_lesion") ||
-            (r.reported_lumps === "no" && r.verdict === "possible_condition")
-        );
+        return rows.filter(disagrees);
       case "unclear":
         return rows.filter((r) => r.verdict === "unclear");
+      case "rejected":
+        return rows.filter((r) => r.animal_present === false);
+      case "overrides":
+        return rows.filter((r) => r.label_species_changed);
+      case "unlabelled":
+        return rows.filter((r) => r.animal_present !== false && !r.label_lumps);
       default:
         return rows;
     }
@@ -148,13 +191,13 @@ export default function ReviewPage() {
 
   const exportCsv = () => {
     const cols = [
-      "id", "created_at", "species", "reported_lumps", "verdict",
-      "probability", "concern_band", "abstain_reason", "blur_variance",
-      "inference_ms", "model_version", "device_id", "image_path",
-      "vet_verdict", "reviewer_note",
+      "id", "created_at", "species_final", "label_lumps", "detected_species",
+      "label_species_changed", "animal_present", "verdict", "probability",
+      "p_cattle", "p_buffalo", "p_other", "concern_band", "abstain_reason",
+      "blur_variance", "inference_ms", "model_version", "device_id",
+      "image_path", "vet_verdict", "reviewer_note",
     ] as const;
-    const esc = (v: unknown) =>
-      `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csv = [
       cols.join(","),
       ...visible.map((r) => cols.map((c) => esc(r[c as keyof Row])).join(",")),
@@ -275,7 +318,7 @@ export default function ReviewPage() {
       </div>
 
       <div
-        className="mt-4 grid grid-cols-2 gap-3 rounded-xl border p-4 sm:grid-cols-3"
+        className="mt-4 grid grid-cols-2 gap-3 rounded-xl border p-4 sm:grid-cols-4"
         style={{ borderColor: "var(--line)", background: "var(--card)" }}
       >
         <Stat label="total" value={summary.total} />
@@ -288,18 +331,13 @@ export default function ReviewPage() {
           note="the gap the project exists to close"
         />
         <Stat label="buffalo · no lumps" value={summary.buffaloNo} />
-        <Stat label="model said unclear" value={summary.unclear} />
+        <Stat label="not an animal" value={summary.rejected} />
+        <Stat label="no answer given" value={summary.unlabelled} />
+        <Stat label="species overridden" value={summary.overrides} note="detector was wrong, or unclear" />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {(
-          [
-            ["all", "All"],
-            ["buffalo_lumps", "Buffalo with lumps"],
-            ["disagreements", "Person ≠ model"],
-            ["unclear", "Unclear"],
-          ] as [Filter, string][]
-        ).map(([k, label]) => (
+        {FILTERS.map(([k, label]) => (
           <button
             key={k}
             type="button"
@@ -369,9 +407,14 @@ function Stat({
 }
 
 function Card({ row, url }: { row: Row; url?: string }) {
-  const disagrees =
-    (row.reported_lumps === "yes" && row.verdict === "no_obvious_lesion") ||
-    (row.reported_lumps === "no" && row.verdict === "possible_condition");
+  const rejected = row.animal_present === false;
+  const speciesLine = rejected
+    ? `detector: not an animal (p_other ${row.p_other?.toFixed(2) ?? "?"})`
+    : row.label_species
+      ? row.label_species_changed
+        ? `${row.label_species} (person) — detector said ${row.detected_species}`
+        : `${row.label_species} (confirmed)`
+      : `${row.detected_species ?? "?"} (detected, unconfirmed)`;
 
   return (
     <div
@@ -384,25 +427,22 @@ function Card({ row, url }: { row: Row; url?: string }) {
           <img src={url} alt="" className="aspect-square w-full object-cover" />
         </a>
       ) : (
-        <div
-          className="aspect-square w-full"
-          style={{ background: "var(--card)" }}
-        />
+        <div className="aspect-square w-full" style={{ background: "var(--card)" }} />
       )}
       <div className="space-y-1 px-3 py-2 text-[12px]">
-        <p className="font-medium">
-          {row.species} · reported lumps: {row.reported_lumps}
-        </p>
+        <p className="font-medium">{speciesLine}</p>
         <p style={{ color: "var(--muted)" }}>
-          model: {row.verdict} ({row.probability.toFixed(3)})
+          lumps: {row.label_lumps ?? "—"} · model: {row.verdict} ({row.probability.toFixed(3)})
           {row.abstain_reason ? ` · ${row.abstain_reason}` : ""}
         </p>
-        {disagrees && (
+        {disagrees(row) && (
           <p style={{ color: "var(--concern-mid)" }}>person disagrees with model</p>
         )}
+        {row.label_species_changed && (
+          <p style={{ color: "var(--concern-mid)" }}>species overridden by person</p>
+        )}
         <p className="font-mono text-[11px]" style={{ color: "var(--muted)" }}>
-          {new Date(row.created_at).toLocaleString()} ·{" "}
-          {row.device_id?.slice(0, 8) ?? "?"}
+          {new Date(row.created_at).toLocaleString()} · {row.device_id?.slice(0, 8) ?? "?"}
         </p>
       </div>
     </div>

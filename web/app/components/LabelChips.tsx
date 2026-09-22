@@ -11,32 +11,44 @@ export type LumpsAnswer = "yes" | "no" | "not_sure";
  * human "yes, it has lumps" attached to it is worth more than any amount of
  * further engineering on the cattle data.
  *
- * So these are asked BEFORE the verdict is revealed. A person who has already
+ * Species is now pre-filled from the detector and shown as such; the person
+ * only has to tap if it is wrong. The answer still gets recorded either way --
+ * and whether they changed it is recorded too, because a high override rate
+ * is the detector being wrong.
+ *
+ * These are asked BEFORE the verdict is revealed. A person who has already
  * seen the model say "possible skin condition" is no longer an independent
- * observer -- they are agreeing or disagreeing with a machine, and the label
- * is contaminated.
+ * observer -- they are agreeing or disagreeing with a machine.
  */
 export function LabelChips({
   species,
   lumps,
+  detectedSpecies,
   onSpecies,
   onLumps,
 }: {
   species: Species | null;
   lumps: LumpsAnswer | null;
+  detectedSpecies?: Species | null;
   onSpecies: (s: Species) => void;
   onLumps: (l: LumpsAnswer) => void;
 }) {
   return (
     <div className="space-y-4">
       <Group
-        label="Which animal is this?"
-        labelUr="یہ کون سا جانور ہے؟"
+        label={
+          detectedSpecies
+            ? "Which animal is this? (tap to change if wrong)"
+            : "Which animal is this?"
+        }
+        labelUr="یہ کون سا جانور ہے؟ (غلط ہو تو بدلیں)"
         options={[
           { value: "cattle", label: "Cattle", labelUr: "گائے" },
           { value: "buffalo", label: "Buffalo", labelUr: "بھینس" },
         ]}
         value={species}
+        badge={detectedSpecies ?? undefined}
+        badgeText="detected"
         onChange={(v) => onSpecies(v as Species)}
       />
 
@@ -60,12 +72,16 @@ function Group({
   labelUr,
   options,
   value,
+  badge,
+  badgeText,
   onChange,
 }: {
   label: string;
   labelUr: string;
   options: { value: string; label: string; labelUr: string }[];
   value: string | null;
+  badge?: string;
+  badgeText?: string;
   onChange: (v: string) => void;
 }) {
   return (
@@ -92,6 +108,17 @@ function Group({
             >
               {o.label}
               <span className="ur ml-2 opacity-80">{o.labelUr}</span>
+              {badge === o.value && (
+                <span
+                  className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                  style={{
+                    background: active ? "rgba(255,255,255,.25)" : "var(--card)",
+                    color: active ? "var(--bg)" : "var(--muted)",
+                  }}
+                >
+                  {badgeText}
+                </span>
+              )}
             </button>
           );
         })}

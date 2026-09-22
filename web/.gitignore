@@ -11,3 +11,5 @@ public/ort/
 # public/models/*.onnx is deliberately NOT ignored: no build step produces the
 # model, so excluding it would deploy a site that cannot score anything.
 tsconfig.tsbuildinfo
+
+.vercel

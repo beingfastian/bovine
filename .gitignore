@@ -37,3 +37,6 @@ web/public/ort/
 
 # TypeScript incremental build cache
 web/tsconfig.tsbuildinfo
+
+# Regenerable 256px Buffalo-Pak bundle; the source archive is already ignored above.
+ai/data/_upload_buffalo/*.zip

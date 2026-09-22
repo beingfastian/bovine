@@ -1,0 +1,22 @@
+{
+  "id": "hanzlaiqbal/bovine-lsd-gate",
+  "title": "bovine-lsd-gate",
+  "code_file": "bovine_lsd_gate.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "hanzlaiqbal/bovine-lsd-model-v1",
+    "hanzlaiqbal/bovine-lsd-bundle",
+    "hanzlaiqbal/bovine-buffalo-pak-256-v2",
+    "prasunroy/natural-images",
+    "adilshamim8/rock-paper-scissors",
+    "imbikramsaha/caltech-101",
+    "puneet6060/intel-image-classification",
+    "jessicali9530/lfw-dataset"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

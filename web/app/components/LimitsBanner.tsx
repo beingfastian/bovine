@@ -72,8 +72,10 @@ export function LimitsBanner({ species }: { species: "cattle" | "buffalo" | null
             history, temperature, appetite or herd.
           </li>
           <li>
-            It does not check whether there is an animal in the photo at all. If
-            you photograph a wall, it will still return a score.
+            Before scoring, it checks whether the photo looks like a cattle or
+            buffalo at all, and tells you when it does not. That check is new
+            and imperfect: if it turns away a real animal, please say so on the
+            screen that follows — that is how it gets fixed.
           </li>
         </ul>
       )}

@@ -372,6 +372,53 @@ ai/scripts/make_selftest_fixtures.py  browser parity fixtures
 ai/reports/onnx_verification.json   the numbers above
 ```
 
+### Gate 1 and species detection — `bi-lsd-mnv3l-v1.0.0-gate` (2026-09-23)
+
+Field testing on 2026-09-22 produced a lesion verdict for a photograph of a
+**hand**. The shipped model, measured afterwards, flagged **12–24%** of
+non-animal photographs as "possible condition". Gate 1 from
+`AI_IMPLEMENTATION_PLAN.md` §6.2 was therefore built, as two extra outputs on
+the same backbone (download +1.0 MB; lesion weights byte-identical):
+
+| Output | What | Held-out result |
+|---|---|---|
+| `species` | Dense(3) softmax: cattle / buffalo / other | cattle→cattle **0.9967**, buffalo→buffalo **1.0000** (all three breeds), other→other 0.9885 |
+| `ood` | Mahalanobis d² of the 960-d pooled feature from the bovine training distribution, PCA k=384, computed in-graph | AUROC non-animal vs animal **0.956** |
+
+**Why two halves.** The softmax alone, tested on twenty real landscape
+photographs, rejected **none** — every one scored p(cattle) = 1.000. The
+fine-tuned backbone learned that fields, grass and sky mean cattle, and a
+closed softmax cannot say "none of these" (§6.1 of the plan predicted exactly
+this). The distance term is open-set: it needs no example of the category. With
+both, **12/12** of those landscapes are rejected.
+
+**Honest negatives.** Training negatives: natural-images, real hand
+photographs, 70% of Caltech-101's classes. Everything the gate is judged on for
+open-set behaviour was never trained on in any form — Intel scenes, LFW faces,
+and the other 30% of Caltech classes (class-disjoint). On **6,588** such
+photographs the combined gate rejects **82.6%** at the retention operating
+point (T = 0.7; the shipped T = 0.8 figure is pinned by kernel v7).
+
+**Operating point.** `oodMax = 746.1` (99.5th percentile of held-out cattle
+d²), `otherMax = 0.8`. Joint real-animal retention on the locked test split:
+**cattle 0.9902, buffalo 1.0000**. The six cattle photographs turned away were
+inspected individually (`ai/reports/gate_rejected_cattle_inspection.json`): a
+laptop screenshot with overlay text (labelled *lesion*), a cartoon cow, a
+fibreglass statue, an antelope, a distant herd, and one genuine loss — calves
+in coats at d² = 747. Four of the six are the training-data contamination §6
+already documented; the gate now catches it at inference.
+
+**Not measured:** field photographs. Every number above is web-sourced or
+curated. The gate stores `p_other` and `ood_distance` raw on every field row
+precisely so both thresholds can be retuned from real data.
+
+```
+ai/scripts/build_gate_notebook.py     generates the Kaggle kernel (train + export + verify)
+ai/scripts/verify_gate.py             local: lesion unchanged, thresholds, real non-animals
+ai/reports/gate_report.json           held-out numbers (reconstructed from the kernel's progress log)
+ai/reports/gate_verification.json     the local checks
+```
+
 ---
 
 ## 9. Acceptance status

@@ -1,0 +1,32 @@
+{
+  "what": "Every cattle test-split photograph the shipped Gate 1 turns away at oodMax=746.1, otherMax=0.8, inspected by eye on 2026-09-23. 6 of 611 (retention 0.9902).",
+  "why_it_matters": "A wrongly rejected real animal is the worst outcome for a data-collection app. These six are the whole cost of the gate on held-out cattle, so each one is looked at rather than counted.",
+  "artifact": "bi-lsd-mnv3l-v1.0.0-gate.fp16.onnx",
+  "rejected": [
+    {"index": 30, "source": "mendeley", "dataset_label": "lesion", "by": ["softmax"], "p_other": 0.97, "d2": 596,
+     "content": "Laptop screenshot with overlay text 'INTERACTIVE DISEASE PROFILES' and a person's hand. No animal.",
+     "verdict": "correct rejection -- training-data contamination (the news-screenshot class documented in MODEL_CARD.md section 6), and it carried a LESION label"},
+    {"index": 130, "source": "mendeley", "dataset_label": "normal", "by": ["softmax"], "p_other": 0.87, "d2": 564,
+     "content": "Cartoon / emoji cow on a flat green background.",
+     "verdict": "correct rejection -- not a photograph of an animal"},
+    {"index": 145, "source": "mendeley", "dataset_label": "normal", "by": ["ood"], "p_other": 0.00, "d2": 823,
+     "content": "Herd of roughly twenty cattle far away in a mountain pasture; no individual animal fills more than a few percent of the frame.",
+     "verdict": "defensible rejection -- real cattle, but no skin is assessable at this distance; AI_IMPLEMENTATION_PLAN.md 6.2 specified rejecting bbox < 15% of frame for exactly this reason"},
+    {"index": 179, "source": "mendeley", "dataset_label": "normal", "by": ["ood"], "p_other": 0.00, "d2": 747,
+     "content": "Three dairy calves wearing pink calf jackets on straw in a barn.",
+     "verdict": "GENUINE LOSS -- real cattle, unusual because of the clothing; d2 747 against a threshold of 746.1. The one true false rejection in 611."},
+    {"index": 214, "source": "roboflow", "dataset_label": "normal", "by": ["ood", "softmax"], "p_other": 1.00, "d2": 915,
+     "content": "Fibreglass Holstein statue on the roof of a shop, with signage.",
+     "verdict": "correct rejection -- not a live animal"},
+    {"index": 593, "source": "roboflow", "dataset_label": "normal", "by": ["ood", "softmax"], "p_other": 0.84, "d2": 1341,
+     "content": "An antelope (eland -- long spiral horns) standing in scrub.",
+     "verdict": "correct rejection -- not a bovine at all, mislabelled in the source dataset"}
+  ],
+  "summary": {
+    "rejected": 6,
+    "correct_or_defensible": 5,
+    "genuine_false_rejections": 1,
+    "of_which_dataset_contamination_now_caught": 4,
+    "note": "Four of the six are images that should never have been in a cattle dataset. The gate is doing to the test split what MODEL_CARD.md section 10 queued as a future cleanup task for the training split."
+  }
+}

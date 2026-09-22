@@ -5,12 +5,12 @@ import { DEFAULT_THRESHOLDS, MODEL_VERSION } from "@/lib/model";
 import { decodeImage, prepareImage } from "@/lib/preprocess";
 import { runInference } from "@/lib/infer";
 import { assessQuality } from "@/lib/quality";
-import { decide } from "@/lib/verdict";
+import { decide, detectSpecies } from "@/lib/verdict";
 
 /**
  * Browser-vs-Python parity harness.
  *
- * The Kaggle kernel and ai/scripts/verify_onnx.py prove the ONNX graph is
+ * The Kaggle kernel and ai/scripts/verify_gate.py prove the ONNX graph is
  * numerically the model we measured. Neither proves the BROWSER hands it the
  * same pixels: canvas downscaling is not PIL bilinear, and the JPEG decoders
  * differ. That gap is unmeasurable from Node, so it gets measured here, on the
@@ -23,6 +23,10 @@ import { decide } from "@/lib/verdict";
 interface Fixture {
   file: string;
   expectedProbability: number;
+  /** Present once ai/scripts/make_selftest_fixtures.py has been re-run against
+   *  the two-output model. */
+  expectedSpecies?: "cattle" | "buffalo" | "other";
+  expectedOther?: number;
   label: number;
   source: string;
   severity: string;
@@ -37,6 +41,10 @@ interface Row extends Fixture {
   /** Sits within BOUNDARY_TOLERANCE of tau or a dead-band edge, where the
    *  verdict is undefined at this precision. */
   onBoundary: boolean;
+  species: "cattle" | "buffalo" | "other";
+  pOther: number;
+  ood: number;
+  speciesAgrees: boolean | null;
   latencyMs: number;
 }
 
@@ -80,17 +88,20 @@ export default function SelfTest() {
         const quality = assessQuality(prepared.pixels, t);
         bitmap.close();
 
-        const { probability, latencyMs } = await runInference(prepared.tensor);
+        const { probability, species, ood, latencyMs } = await runInference(prepared.tensor);
 
-        // Compare verdicts with the quality gate neutralised, so this measures
-        // the numeric pipeline rather than the blur of an old web JPEG.
+        // Compare verdicts with the quality gate neutralised and the animal
+        // gate satisfied, so this measures the numeric pipeline rather than
+        // the blur of an old web JPEG.
         const passing = { ...quality, ok: true, reason: null };
-        const expectedVerdict = decide(f.expectedProbability, passing, t).verdict;
-        const actualVerdict = decide(probability, passing, t).verdict;
+        const bovine = { cattle: 1, buffalo: 0, other: 0 };
+        const expectedVerdict = decide(f.expectedProbability, bovine, 0, passing, t).verdict;
+        const actualVerdict = decide(probability, bovine, 0, passing, t).verdict;
 
         const onBoundary = [t.tau, t.unclearLow, t.unclearHigh].some(
           (b) => Math.abs(f.expectedProbability - b) < BOUNDARY_TOLERANCE
         );
+        const detected = detectSpecies(species);
 
         out.push({
           ...f,
@@ -100,6 +111,10 @@ export default function SelfTest() {
           actualVerdict,
           verdictAgrees: expectedVerdict === actualVerdict,
           onBoundary,
+          species: detected,
+          pOther: species.other,
+          ood,
+          speciesAgrees: f.expectedSpecies ? detected === f.expectedSpecies : null,
           latencyMs,
         });
         setRows([...out]);
@@ -119,21 +134,22 @@ export default function SelfTest() {
   }, [run]);
 
   const maxDiff = rows.length ? Math.max(...rows.map((r) => r.diff)) : 0;
-  const meanDiff = rows.length
-    ? rows.reduce((a, r) => a + r.diff, 0) / rows.length
-    : 0;
+  const meanDiff = rows.length ? rows.reduce((a, r) => a + r.diff, 0) / rows.length : 0;
   const disagreements = rows.filter((r) => !r.verdictAgrees && !r.onBoundary).length;
   const boundaryFlips = rows.filter((r) => !r.verdictAgrees && r.onBoundary).length;
+  const speciesChecked = rows.filter((r) => r.speciesAgrees !== null).length;
+  const speciesWrong = rows.filter((r) => r.speciesAgrees === false).length;
+  const gateRejects = rows.filter(
+    (r) => r.pOther >= DEFAULT_THRESHOLDS.otherMax || r.ood >= DEFAULT_THRESHOLDS.oodMax
+  ).length;
   const medianLatency = rows.length
-    ? [...rows.map((r) => r.latencyMs)].sort((a, b) => a - b)[
-        Math.floor(rows.length / 2)
-      ]
+    ? [...rows.map((r) => r.latencyMs)].sort((a, b) => a - b)[Math.floor(rows.length / 2)]
     : 0;
   const complete = status === "done" && rows.length > 0;
-  const pass = complete && disagreements === 0 && maxDiff < 0.02;
+  const pass = complete && disagreements === 0 && maxDiff < 0.02 && speciesWrong === 0;
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 pb-16 pt-6">
+    <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6">
       <h1 className="text-xl font-semibold">Browser parity self-test</h1>
       <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
         Runs {MODEL_VERSION} in this browser over fixtures whose expected
@@ -152,12 +168,14 @@ export default function SelfTest() {
           <p className="text-lg font-semibold">{pass ? "PASS" : "FAIL"}</p>
           <p className="mt-1 text-sm">
             {rows.length} fixtures · max drift {maxDiff.toFixed(5)} · mean drift{" "}
-            {meanDiff.toFixed(5)} · verdict disagreements {disagreements} ·
+            {meanDiff.toFixed(5)} · verdict disagreements {disagreements} · species
+            wrong {speciesWrong}/{speciesChecked} · gate would reject {gateRejects} ·
             median inference {medianLatency.toFixed(0)} ms
           </p>
           <p className="mt-1 text-xs opacity-80">
-            Criterion: max probability drift under 0.02, and no verdict
-            disagreement away from a threshold boundary.
+            Criterion: max probability drift under 0.02, no verdict disagreement
+            away from a threshold boundary, and species matches Python wherever
+            the fixture records it.
             {boundaryFlips > 0 &&
               ` ${boundaryFlips} boundary-sitting fixture${
                 boundaryFlips === 1 ? "" : "s"
@@ -175,10 +193,7 @@ export default function SelfTest() {
       {error && (
         <div
           className="mt-4 rounded-xl px-4 py-3 text-sm"
-          style={{
-            background: "var(--concern-high-bg)",
-            color: "var(--concern-high)",
-          }}
+          style={{ background: "var(--concern-high-bg)", color: "var(--concern-high)" }}
         >
           {error}
         </div>
@@ -202,16 +217,16 @@ export default function SelfTest() {
               <th className="py-1 pr-3 text-right">python</th>
               <th className="py-1 pr-3 text-right">browser</th>
               <th className="py-1 pr-3 text-right">diff</th>
+              <th className="py-1 pr-3">species</th>
+              <th className="py-1 pr-3 text-right">p_other</th>
+              <th className="py-1 pr-3 text-right">d²</th>
               <th className="py-1 pr-3 text-right">ms</th>
               <th className="py-1">verdict</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr
-                key={r.file}
-                style={{ borderTop: "1px solid var(--line)" }}
-              >
+              <tr key={r.file} style={{ borderTop: "1px solid var(--line)" }}>
                 <td className="py-1 pr-3">
                   {r.file.slice(0, 8)}
                   {r.onBoundary && (
@@ -220,21 +235,31 @@ export default function SelfTest() {
                     </span>
                   )}
                 </td>
-                <td className="py-1 pr-3 text-right">
-                  {r.expectedProbability.toFixed(4)}
-                </td>
+                <td className="py-1 pr-3 text-right">{r.expectedProbability.toFixed(4)}</td>
                 <td className="py-1 pr-3 text-right">{r.actual.toFixed(4)}</td>
                 <td
                   className="py-1 pr-3 text-right"
-                  style={{
-                    color: r.diff > 0.02 ? "var(--concern-mid)" : undefined,
-                  }}
+                  style={{ color: r.diff > 0.02 ? "var(--concern-mid)" : undefined }}
                 >
                   {r.diff.toFixed(5)}
                 </td>
-                <td className="py-1 pr-3 text-right">
-                  {r.latencyMs.toFixed(0)}
+                <td
+                  className="py-1 pr-3"
+                  style={{
+                    color:
+                      r.speciesAgrees === false
+                        ? "var(--concern-high)"
+                        : r.speciesAgrees === true
+                          ? "var(--concern-low)"
+                          : undefined,
+                  }}
+                >
+                  {r.species}
+                  {r.speciesAgrees === false && ` (py: ${r.expectedSpecies})`}
                 </td>
+                <td className="py-1 pr-3 text-right">{r.pOther.toFixed(3)}</td>
+                <td className="py-1 pr-3 text-right">{r.ood.toFixed(1)}</td>
+                <td className="py-1 pr-3 text-right">{r.latencyMs.toFixed(0)}</td>
                 <td
                   className="py-1"
                   style={{

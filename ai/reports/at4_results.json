@@ -1,0 +1,42 @@
+{
+  "n": 1024,
+  "n_lumpy": 324,
+  "n_normal": 700,
+  "unreadable": 0,
+  "roc_auc": 0.5,
+  "roc_auc_inverted": 0.5,
+  "at_0_5": {
+    "threshold": 0.5,
+    "accuracy": 0.68359375,
+    "balanced_accuracy": 0.5,
+    "precision": 0.0,
+    "recall": 0.0,
+    "specificity": 1.0,
+    "f1": 0.0,
+    "tp": 0,
+    "tn": 700,
+    "fp": 0,
+    "fn": 324
+  },
+  "best": {
+    "threshold": 0.05,
+    "accuracy": 0.68359375,
+    "balanced_accuracy": 0.5,
+    "precision": 0.0,
+    "recall": 0.0,
+    "specificity": 1.0,
+    "f1": 0.0,
+    "tp": 0,
+    "tn": 700,
+    "fp": 0,
+    "fn": 324
+  },
+  "prob_stats": {
+    "min": 0.0,
+    "max": 0.0,
+    "mean_lumpy": 0.0,
+    "mean_normal": 0.0,
+    "n_exactly_zero": 1024,
+    "n_exactly_one": 0
+  }
+}

@@ -2,9 +2,10 @@
  * End-to-end walk through the real capture page in a real browser.
  *
  * /selftest proves the numbers are right. This proves the SCREEN is right:
- * that a picked file reaches the model, that the label step gates the reveal,
- * that a verdict renders -- and, most importantly, that the forbidden words
- * never appear on screen.
+ * that a picked file reaches the model, that the photo is saved the moment it
+ * is scored, that species is pre-filled from the detector, that the label step
+ * gates the reveal, that a verdict renders, that a non-animal is turned away
+ * -- and, most importantly, that the forbidden words never appear on screen.
  *
  *   node scripts/e2e-page.mjs [baseUrl]
  */
@@ -37,10 +38,7 @@ if (!executablePath) {
  */
 const ALLOWED = [/\bnot a diagnosis\b/gi];
 const FORBIDDEN = [/\bhealthy\b/i, /lumpy\s*skin/i, /\bLSD\b/, /\bdiagnos(is|ed|e)\b/i];
-
-function stripAllowed(text) {
-  return ALLOWED.reduce((acc, re) => acc.replace(re, ""), text);
-}
+const stripAllowed = (text) => ALLOWED.reduce((acc, re) => acc.replace(re, ""), text);
 
 const fixtures = JSON.parse(
   readFileSync(join("public", "fixtures", "fixtures.json"), "utf8")
@@ -50,11 +48,40 @@ const fixtures = JSON.parse(
 const positive = [...fixtures].reverse().find((f) => f.expectedProbability > 0.95);
 const negative = fixtures.find((f) => f.expectedProbability < 0.05);
 
+// A real photograph of something that is not an animal. Windows ships
+// landscape wallpapers; they are not committed, so this leg is skipped when
+// the machine does not have them.
+const NON_ANIMAL = [
+  "C:\\Windows\\Web\\Wallpaper\\ThemeA\\img20.jpg",
+  "C:\\Windows\\Web\\Wallpaper\\ThemeB\\img24.jpg",
+  "C:\\Windows\\Web\\Wallpaper\\Spotlight\\img14.jpg",
+].find(existsSync);
+
 const failures = [];
 function check(label, ok, detail = "") {
   console.log(`  [${ok ? "PASS" : "FAIL"}] ${label}${detail ? " — " + detail : ""}`);
   if (!ok) failures.push(label);
 }
+
+const clickButton = (page, text) =>
+  page.evaluate((t) => {
+    const b = [...document.querySelectorAll("button")].find((x) =>
+      x.textContent.trim().startsWith(t) || x.textContent.includes(t)
+    );
+    if (!b) return false;
+    b.click();
+    return true;
+  }, text);
+
+const bodyText = (page) => page.evaluate(() => document.body.innerText);
+
+const waitForText = (page, re, timeout = 120_000) =>
+  page.waitForFunction(
+    (src, flags) => new RegExp(src, flags).test(document.body.innerText),
+    { timeout, polling: 300 },
+    re.source,
+    re.flags
+  );
 
 const browser = await puppeteer.launch({
   executablePath,
@@ -62,80 +89,97 @@ const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
 
+async function newPage() {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 390, height: 844, isMobile: true });
+  page.on("pageerror", (e) => console.error("  [page exception]", e.message));
+  await page.goto(BASE + "/", { waitUntil: "networkidle2", timeout: 120_000 });
+  const inputs = await page.$$('input[type="file"]');
+  check("two file inputs present (camera + gallery)", inputs.length === 2);
+  return { page, gallery: inputs[1] };
+}
+
+/** Whether this build talks to Supabase at all. */
+async function saveConfigured(page) {
+  const text = await bodyText(page);
+  return !/not configured/i.test(text);
+}
+
+async function expectSaved(page, what) {
+  if (!(await saveConfigured(page))) {
+    console.log(`  [skip] ${what} — no Supabase credentials in this build`);
+    return;
+  }
+  try {
+    await waitForText(page, /Photo saved|Photo and your answer saved|Could not save/, 120_000);
+  } catch {
+    /* fall through to the check below */
+  }
+  const text = await bodyText(page);
+  const saved = /Photo saved|Photo and your answer saved/.test(text);
+  check(
+    what,
+    saved,
+    saved
+      ? ""
+      : (text.match(/Could not save[\s\S]{0,240}/) ?? ["no save status rendered"])[0].replace(/\s+/g, " ")
+  );
+}
+
 try {
+  // ------------------------------------------------------------ cattle fixtures
   for (const fx of [positive, negative]) {
     console.log(`\n=== ${fx.file}  python p=${fx.expectedProbability} ===`);
+    const { page, gallery } = await newPage();
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 390, height: 844, isMobile: true });
-    page.on("pageerror", (e) => console.error("  [page exception]", e.message));
+    const before = await bodyText(page);
+    check("disclosure about saving is visible before capture", /saved to improve the tool/i.test(before));
+    check("no Send button exists", !/Send this photo/.test(before));
 
-    await page.goto(BASE + "/", { waitUntil: "networkidle2", timeout: 120_000 });
-
-    // The gallery input is the second hidden file input.
-    const inputs = await page.$$('input[type="file"]');
-    check("two file inputs present (camera + gallery)", inputs.length === 2);
-    await inputs[1].uploadFile(join("public", "fixtures", fx.file));
-
-    await page.waitForFunction(
-      () => document.body.innerText.includes("what do you see"),
-      { timeout: 180_000, polling: 300 }
-    );
+    await gallery.uploadFile(join("public", "fixtures", fx.file));
+    await waitForText(page, /what do you see/, 180_000);
     check("label step gates the reveal", true);
 
-    const beforeReveal = await page.evaluate(() => document.body.innerText);
+    const labelling = await bodyText(page);
     check(
       "no verdict text leaks before labelling",
-      !/Possible skin condition|No obvious skin lesion/.test(beforeReveal)
+      !/Possible skin condition|No obvious skin lesion/.test(labelling)
     );
 
-    // Answer both chips.
-    await page.evaluate(() => {
-      const byText = (t) =>
-        [...document.querySelectorAll("button")].find((b) =>
-          b.textContent.trim().startsWith(t)
-        );
-      byText("Buffalo")?.click();
-    });
-    await page.evaluate(() => {
-      const byText = (t) =>
-        [...document.querySelectorAll("button")].find((b) =>
-          b.textContent.trim().startsWith(t)
-        );
-      byText("Yes")?.click();
-    });
+    // Species must be pre-filled by the detector for a cattle photo.
+    // The chip's spans have no whitespace between them ("Cattleگائےdetected"),
+    // so match on the prefix rather than splitting.
+    const pressed = await page.evaluate(() =>
+      [...document.querySelectorAll('button[aria-pressed="true"]')].map((b) => b.textContent.trim())
+    );
+    check(
+      "species pre-filled from detector",
+      pressed.some((t) => t.startsWith("Cattle") || t.startsWith("Buffalo")),
+      pressed.join(" | ")
+    );
+    check("detector badge shown", /detected/i.test(labelling));
 
-    const banner = await page.evaluate(() => document.body.innerText);
+    // The photo save must not wait for any answer.
+    await expectSaved(page, "photo saved before any answer");
+
+    // Switch to buffalo to exercise the warning banner, then answer lumps.
+    check("buffalo chip clickable", await clickButton(page, "Buffalo"));
+    check("lumps chip clickable", await clickButton(page, "Yes"));
     check(
       "buffalo warning appears once buffalo is selected",
-      /never been tested on a buffalo/i.test(banner)
+      /never been tested on a buffalo/i.test(await bodyText(page))
     );
 
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll("button")].find((x) =>
-        x.textContent.includes("Show the result")
-      );
-      b?.click();
-    });
-
-    await page.waitForFunction(
-      () =>
-        /Possible skin condition|No obvious skin lesion in this photo|Unclear|too blurry|too dark|washed out|borderline/i.test(
-          document.body.innerText
-        ),
-      { timeout: 60_000, polling: 300 }
+    check("reveal button clickable", await clickButton(page, "Show the result"));
+    await waitForText(
+      page,
+      /Possible skin condition|No obvious skin lesion in this photo|Unclear|too blurry|too dark|washed out|borderline/i,
+      60_000
     );
 
-    // Open the technical panel to read the raw score.
-    await page.evaluate(() => {
-      const b = [...document.querySelectorAll("button")].find((x) =>
-        x.textContent.includes("Technical details")
-      );
-      b?.click();
-    });
+    await clickButton(page, "Technical details");
     await new Promise((r) => setTimeout(r, 300));
-
-    const text = await page.evaluate(() => document.body.innerText);
+    const text = await bodyText(page);
 
     const m = text.match(/raw score p\(lesion\)\s*\n?\s*([\d.]+)/);
     const shown = m ? Number(m[1]) : NaN;
@@ -144,6 +188,7 @@ try {
       Number.isFinite(shown) && Math.abs(shown - fx.expectedProbability) < 0.02,
       `browser ${shown} vs python ${fx.expectedProbability}`
     );
+    check("species probabilities rendered", /p\(cattle\/buffalo\/other\)/.test(text));
 
     const expectPositive = fx.expectedProbability >= 0.6;
     check(
@@ -154,37 +199,36 @@ try {
     );
 
     const screened = stripAllowed(text);
-    for (const re of FORBIDDEN) {
-      check(`forbidden copy absent: ${re}`, !re.test(screened));
-    }
-
+    for (const re of FORBIDDEN) check(`forbidden copy absent: ${re}`, !re.test(screened));
     check("Urdu verdict rendered", /جلد|تصویر/.test(text));
 
-    // --- submission, when the build is configured for it ---
-    if (/Send this photo/.test(text)) {
-      await page.evaluate(() => {
-        const b = [...document.querySelectorAll("button")].find((x) =>
-          x.textContent.includes("Send this photo")
-        );
-        b?.click();
-      });
-      await page.waitForFunction(
-        () => /Sent — thank you|Photo upload failed|Saving the record failed|not configured/.test(
-          document.body.innerText
-        ),
-        { timeout: 120_000, polling: 300 }
-      );
-      const after = await page.evaluate(() => document.body.innerText);
-      const sent = /Sent — thank you/.test(after);
-      check(
-        "submission accepted by Supabase",
-        sent,
-        sent ? "" : (after.match(/(Photo upload failed|Saving the record failed)[^\n]*/) ?? ["see page"])[0]
-      );
-    } else if (/not configured/.test(text)) {
-      console.log("  [skip] submission — no Supabase credentials in this build");
-    }
+    await expectSaved(page, "answer saved after reveal");
+    await page.close();
+  }
 
+  // ------------------------------------------------------------ not an animal
+  console.log(`\n=== non-animal: ${NON_ANIMAL ?? "(no wallpaper found)"} ===`);
+  if (!NON_ANIMAL) {
+    console.log("  [skip] no non-animal photo available on this machine");
+  } else {
+    const { page, gallery } = await newPage();
+    await gallery.uploadFile(NON_ANIMAL);
+    await waitForText(
+      page,
+      /could not find a cattle or buffalo|what do you see/i,
+      180_000
+    );
+    const text = await bodyText(page);
+    const rejected = /could not find a cattle or buffalo/i.test(text);
+    check("non-animal photo is turned away by the gate", rejected);
+    if (rejected) {
+      check("no lesion verdict rendered for a non-animal", !/Possible skin condition|No obvious skin lesion/.test(text));
+      check("asks whether an animal is actually present", /actually a cattle or buffalo/i.test(text));
+      await expectSaved(page, "rejected photo still saved");
+      check("'No' answer clickable", await clickButton(page, "No"));
+      const screened = stripAllowed(await bodyText(page));
+      for (const re of FORBIDDEN) check(`forbidden copy absent: ${re}`, !re.test(screened));
+    }
     await page.close();
   }
 } finally {

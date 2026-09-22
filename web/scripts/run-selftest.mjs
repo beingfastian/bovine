@@ -50,9 +50,17 @@ try {
   );
 
   const result = await page.evaluate(() => {
+    // Cells by header name, so adding a column to the page cannot silently
+    // shift what this reads (it did: `ms` came back null after species/d²).
+    const heads = [...document.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+    const col = (name) => heads.indexOf(name);
     const rows = [...document.querySelectorAll("tbody tr")].map((tr) => {
       const c = [...tr.children].map((td) => td.textContent.trim());
-      return { file: c[0], python: +c[1], browser: +c[2], diff: +c[3], ms: +c[4], verdict: c[5] };
+      return {
+        file: c[col("file")], python: +c[col("python")], browser: +c[col("browser")],
+        diff: +c[col("diff")], species: c[col("species")], pOther: +c[col("p_other")],
+        d2: +c[col("d²")], ms: +c[col("ms")], verdict: c[col("verdict")],
+      };
     });
     const banner = document.querySelector('[style*="border-radius"]');
     return { rows, text: document.body.innerText.split("\n").filter(Boolean).slice(0, 12) };
@@ -62,26 +70,18 @@ try {
   console.log("BROWSER vs PYTHON");
   console.log("=".repeat(74));
   console.log(
-    "  " +
-      "file".padEnd(10) +
-      "python".padStart(9) +
-      "browser".padStart(10) +
-      "diff".padStart(10) +
-      "ms".padStart(7) +
-      "  verdict"
+    "  " + "file".padEnd(10) + "python".padStart(9) + "browser".padStart(10) + "diff".padStart(10) +
+      "  species".padEnd(11) + "p_other".padStart(8) + "d²".padStart(7) + "ms".padStart(6) + "  verdict"
   );
   for (const r of result.rows) {
     console.log(
-      "  " +
-        r.file.padEnd(10) +
-        r.python.toFixed(4).padStart(9) +
-        r.browser.toFixed(4).padStart(10) +
-        r.diff.toFixed(5).padStart(10) +
-        String(r.ms).padStart(7) +
-        "  " +
-        r.verdict
+      "  " + r.file.padEnd(10) + r.python.toFixed(4).padStart(9) + r.browser.toFixed(4).padStart(10) +
+        r.diff.toFixed(5).padStart(10) + ("  " + r.species).padEnd(11) + r.pOther.toFixed(3).padStart(8) +
+        r.d2.toFixed(0).padStart(7) + String(r.ms).padStart(6) + "  " + r.verdict
     );
   }
+  const speciesWrong = result.rows.filter((r) => r.species.includes("(py:")).length;
+  console.log("  species disagreements:", speciesWrong);
 
   const diffs = result.rows.map((r) => r.diff);
   const maxDiff = Math.max(...diffs);
@@ -99,7 +99,7 @@ try {
   console.log("  median latency  ", times[Math.floor(times.length / 2)], "ms");
   console.log("  max latency     ", times[times.length - 1], "ms");
 
-  const pass = flips === 0 && maxDiff < 0.02;
+  const pass = flips === 0 && maxDiff < 0.02 && speciesWrong === 0;
   console.log("\n  OVERALL:", pass ? "PASS" : "FAIL");
   if (!pass) process.exitCode = 1;
 } finally {

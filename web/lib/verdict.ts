@@ -1,4 +1,4 @@
-import type { Thresholds } from "./model";
+import type { SpeciesProbs, Thresholds } from "./model";
 import type { QualityReport } from "./quality";
 
 /**
@@ -21,6 +21,7 @@ export type Verdict = "possible_condition" | "unclear" | "no_obvious_lesion";
 
 /** Why we abstained, when we abstained. The user gets told which one. */
 export type UnclearReason =
+  | "no_animal"
   | "blurry"
   | "dark"
   | "bright"
@@ -30,41 +31,77 @@ export type UnclearReason =
 export interface VerdictResult {
   verdict: Verdict;
   reason: UnclearReason;
-  /** Raw model output. Never shown to a farmer as a bare percentage. */
+  /** Raw lesion output. Never shown to a farmer as a bare percentage. */
   probability: number;
   concernBand: "low" | "moderate" | "high";
+  /** What the detector thinks is in the frame. */
+  detectedSpecies: "cattle" | "buffalo" | "other";
+  animalPresent: boolean;
+  /** Mahalanobis d^2 from the bovine training distribution. */
+  oodDistance: number;
+  /** Which half of Gate 1 fired, when it fired. Both can. */
+  gateFailedBy: ("ood" | "softmax")[];
+}
+
+export function detectSpecies(s: SpeciesProbs): "cattle" | "buffalo" | "other" {
+  if (s.other >= s.cattle && s.other >= s.buffalo) return "other";
+  return s.buffalo > s.cattle ? "buffalo" : "cattle";
 }
 
 export function decide(
   probability: number,
+  species: SpeciesProbs,
+  ood: number,
   quality: QualityReport,
   t: Thresholds
 ): VerdictResult {
-  const concernBand =
+  const concernBand: VerdictResult["concernBand"] =
     probability >= 0.75 ? "high" : probability >= t.tau ? "moderate" : "low";
+  const detectedSpecies = detectSpecies(species);
 
-  // Quality gates run first and short-circuit. A blurry photo's score is not
-  // evidence of anything, so it must never become a positive or a negative.
+  // Gate 1 has two halves and either can reject:
+  //  - ood: open-set distance from the bovine training distribution. This is
+  //    what catches a wall, a landscape, a hand -- categories the softmax
+  //    was never shown. Measured: the softmax alone called every one of
+  //    twenty landscapes "cattle" with p=1.000.
+  //  - softmax P(other): catches the negative categories it WAS shown, and
+  //    is a cheap second opinion.
+  const gateFailedBy: VerdictResult["gateFailedBy"] = [];
+  if (ood >= t.oodMax) gateFailedBy.push("ood");
+  if (species.other >= t.otherMax) gateFailedBy.push("softmax");
+  const animalPresent = gateFailedBy.length === 0;
+
+  const base: Omit<VerdictResult, "verdict" | "reason"> = {
+    probability,
+    concernBand,
+    detectedSpecies,
+    animalPresent,
+    oodDistance: ood,
+    gateFailedBy,
+  };
+
+  // Gate 1 first. A lesion score for a photograph of a hand is not evidence
+  // of anything, and must never surface as a positive or a negative. Field
+  // testing on 2026-09-22 produced exactly that; this is the fix.
+  if (!animalPresent) {
+    return { ...base, verdict: "unclear", reason: "no_animal" };
+  }
+
+  // Gate 2: image quality. Same logic -- a blurry photo's score is noise.
   if (!quality.ok) {
-    return { verdict: "unclear", reason: quality.reason, probability, concernBand };
+    return { ...base, verdict: "unclear", reason: quality.reason };
   }
 
   // Dead-band around tau. Width is measured, not guessed -- see
-  // ai/reports/deadband_sweep.json and thresholds.json.
+  // ai/reports/onnx_verification.json and thresholds.json.
   if (probability >= t.unclearLow && probability < t.unclearHigh) {
-    return {
-      verdict: "unclear",
-      reason: "borderline_score",
-      probability,
-      concernBand,
-    };
+    return { ...base, verdict: "unclear", reason: "borderline_score" };
   }
 
   return {
+    ...base,
     verdict: probability >= t.tau ? "possible_condition" : "no_obvious_lesion",
     reason: null,
-    probability,
-    concernBand,
   };
 }
 
@@ -101,6 +138,12 @@ export const VERDICT_COPY: Record<Verdict, Copy> = {
 };
 
 export const REASON_COPY: Record<NonNullable<UnclearReason>, Copy> = {
+  no_animal: {
+    headline: "We could not find a cattle or buffalo in this photo",
+    headlineUr: "اس تصویر میں گائے یا بھینس نہیں ملی",
+    body: "Point the camera at the animal so its body fills most of the frame, and try again.",
+    bodyUr: "کیمرہ جانور کی طرف کریں تاکہ جانور تصویر کا بڑا حصہ ہو، اور دوبارہ کوشش کریں۔",
+  },
   blurry: {
     headline: "The photo is too blurry",
     headlineUr: "تصویر دھندلی ہے",

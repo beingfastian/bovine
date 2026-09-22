@@ -34,7 +34,7 @@ create table if not exists public.screenings (
                        ('possible_condition', 'unclear', 'no_obvious_lesion')),
   concern_band       text         check (concern_band in ('low', 'moderate', 'high')),
   abstain_reason     text         check (abstain_reason in
-                       ('blurry', 'dark', 'bright', 'borderline_score')),
+                       ('no_animal', 'blurry', 'dark', 'bright', 'borderline_score')),
   inference_ms       int,
 
   -- image quality gate, stored so thresholds can be retuned from real data
@@ -43,9 +43,21 @@ create table if not exists public.screenings (
   bright_fraction    real,
   mean_luma          real,
 
-  -- THE LABELS. Everything above exists to give these context.
-  species            text         not null check (species in ('cattle', 'buffalo')),
-  reported_lumps     text         not null check (reported_lumps in ('yes', 'no', 'not_sure')),
+  -- Gate 1 / species detector output (migration 002). Raw probabilities are
+  -- stored so the gate threshold can be retuned from field data later.
+  animal_present     boolean,
+  detected_species   text         check (detected_species in ('cattle', 'buffalo', 'other')),
+  p_cattle           real         check (p_cattle  >= 0 and p_cattle  <= 1),
+  p_buffalo          real         check (p_buffalo >= 0 and p_buffalo <= 1),
+  p_other            real         check (p_other   >= 0 and p_other   <= 1),
+  ood_distance       real         check (ood_distance >= 0),
+  app_version        text,
+
+  -- Legacy label columns. Since migration 002 the person's answers live in
+  -- screening_labels (the row is written before they answer); these stay
+  -- nullable for rows written by the first release.
+  species            text         check (species in ('cattle', 'buffalo')),
+  reported_lumps     text         check (reported_lumps in ('yes', 'no', 'not_sure')),
   species_validated  boolean      not null default false,
 
   -- filled in later, by you, from the review page
@@ -121,30 +133,80 @@ create policy "authenticated can read screening photos"
   to authenticated
   using (bucket_id = 'screenings');
 
--- ------------------------------------------------------- convenience view
--- What the collection is actually worth, at a glance. The bottom-right cell --
--- buffalo with reported lumps -- is the number this project lives or dies by.
---
--- SECURITY: a view runs as its OWNER, not its caller, so by default this one
--- would read straight past the RLS policy above and hand anonymous visitors
--- aggregate counts, timestamps and mean scores. Measured, not theorised: as
--- first written it returned real numbers to the anon key. `security_invoker`
--- makes it run as the caller, so anon gets nothing and a signed-in account
--- gets everything. The revoke is belt and braces.
-create or replace view public.collection_summary
+-- ------------------------------------------------------------ screening_labels
+create table if not exists public.screening_labels (
+  id              uuid primary key default gen_random_uuid(),
+  screening_id    uuid not null references public.screenings (id) on delete cascade,
+  created_at      timestamptz not null default now(),
+  species         text not null check (species in ('cattle', 'buffalo')),
+  reported_lumps  text not null check (reported_lumps in ('yes', 'no', 'not_sure')),
+  -- Did the person overrule the detector? A high rate here is the detector
+  -- being wrong, or the question being unclear; either way worth knowing.
+  species_changed boolean not null default false
+);
+
+create index if not exists screening_labels_screening_idx
+  on public.screening_labels (screening_id, created_at desc);
+
+alter table public.screening_labels enable row level security;
+
+drop policy if exists "anon can insert labels" on public.screening_labels;
+create policy "anon can insert labels"
+  on public.screening_labels for insert
+  to anon
+  with check (true);
+
+drop policy if exists "authenticated can read labels" on public.screening_labels;
+create policy "authenticated can read labels"
+  on public.screening_labels for select
+  to authenticated
+  using (true);
+
+-- ------------------------------------------------ screenings_with_labels view
+-- What /review reads: each screening joined to its newest human answer.
+-- security_invoker so it runs as the caller -- anon gets nothing.
+create or replace view public.screenings_with_labels
 with (security_invoker = true) as
 select
-  species,
-  reported_lumps,
-  count(*)                                         as n,
-  count(*) filter (where verdict = 'possible_condition') as model_flagged,
-  count(*) filter (where verdict = 'unclear')            as model_unclear,
-  round(avg(probability)::numeric, 4)              as mean_probability,
-  min(created_at)                                  as first_seen,
-  max(created_at)                                  as last_seen
-from public.screenings
-group by species, reported_lumps
-order by species, reported_lumps;
+  s.*,
+  l.species         as label_species,
+  l.reported_lumps  as label_lumps,
+  l.species_changed as label_species_changed,
+  l.created_at      as labelled_at,
+  -- the species to analyse by: the person's answer if given, else the detector's
+  coalesce(l.species, case when s.detected_species in ('cattle', 'buffalo')
+                           then s.detected_species end) as species_final
+from public.screenings s
+left join lateral (
+  select species, reported_lumps, species_changed, created_at
+  from public.screening_labels
+  where screening_id = s.id
+  order by created_at desc
+  limit 1
+) l on true;
+
+revoke all on public.screenings_with_labels from anon;
+grant select on public.screenings_with_labels to authenticated;
+
+-- --------------------------------------------------------- collection_summary
+-- Rebuilt on the new view, and with security_invoker -- as first written this
+-- view ran as its owner and handed aggregate counts to the anon key.
+drop view if exists public.collection_summary;
+create view public.collection_summary
+with (security_invoker = true) as
+select
+  species_final                                            as species,
+  label_lumps                                              as reported_lumps,
+  count(*)                                                 as n,
+  count(*) filter (where verdict = 'possible_condition')   as model_flagged,
+  count(*) filter (where verdict = 'unclear')              as model_unclear,
+  count(*) filter (where animal_present = false)           as gate_rejected,
+  round(avg(probability)::numeric, 4)                      as mean_probability,
+  min(created_at)                                          as first_seen,
+  max(created_at)                                          as last_seen
+from public.screenings_with_labels
+group by species_final, label_lumps
+order by species_final, label_lumps;
 
 revoke all on public.collection_summary from anon;
 grant select on public.collection_summary to authenticated;

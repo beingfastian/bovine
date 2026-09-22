@@ -1,68 +1,68 @@
 import { BUCKET, getDeviceId, getSupabase } from "./supabase";
-import { MODEL_VERSION, type Thresholds } from "./model";
+import { MODEL_VERSION, type SpeciesProbs, type Thresholds } from "./model";
 import type { QualityReport } from "./quality";
 import type { VerdictResult } from "./verdict";
 
-export interface SubmissionInput {
+/**
+ * Two writes, at two moments.
+ *
+ *  saveScreening -- the instant a photo is scored, before the person is asked
+ *                   anything. Photo + every number the model produced.
+ *  saveLabel     -- when (if) the person answers. A separate INSERT into
+ *                   screening_labels, because anonymous visitors have no
+ *                   UPDATE right anywhere and that is the whole security
+ *                   model. Several labels per screening are allowed; the
+ *                   newest wins in the review view.
+ *
+ * EVERY screening is saved, including "unclear" and "not an animal". Rejected
+ * photos are how the gate gets tuned: a real cow turned away is the single
+ * worst outcome for a data-collection app, and the only way to see it happen
+ * is to keep the evidence.
+ */
+
+export interface ScreeningInput {
+  id: string;
   image: Blob;
   imageWidth: number;
   imageHeight: number;
   capturedAt: string;
   probability: number;
+  species: SpeciesProbs;
+  ood: number;
   latencyMs: number;
   quality: QualityReport;
   verdict: VerdictResult;
   thresholds: Thresholds;
-  species: "cattle" | "buffalo";
-  lumps: "yes" | "no" | "not_sure";
 }
 
-export interface SubmissionResult {
+export interface SaveResult {
   ok: boolean;
-  id?: string;
   error?: string;
 }
 
-/**
- * Upload the photo, then insert the record.
- *
- * Deliberately in that order: a row pointing at a missing image is useless,
- * whereas an orphaned image can be reconciled later from the storage listing.
- * If the insert fails we do not try to delete the uploaded object -- anon has
- * no delete permission, by design, so a spent upload is the acceptable cost of
- * not handing strangers the ability to erase collected data.
- *
- * EVERY screening is submitted, including "unclear" ones. Abstentions are
- * data: a rising abstention rate is the earliest signal that the model is
- * drifting away from the field distribution (AI_IMPLEMENTATION_PLAN.md 8.4).
- */
-export async function submitScreening(
-  input: SubmissionInput
-): Promise<SubmissionResult> {
+/** Upload the photo, then insert the record -- in that order. A row pointing
+ *  at a missing image is useless; an orphaned image can be reconciled later
+ *  from the storage listing. */
+export async function saveScreening(input: ScreeningInput): Promise<SaveResult> {
   const pending = getSupabase();
-  if (!pending) {
-    return { ok: false, error: "Logging is not configured for this build." };
-  }
+  if (!pending) return { ok: false, error: "Saving is not configured for this build." };
   const supabase = await pending;
 
-  const deviceId = getDeviceId();
-  const id = crypto.randomUUID();
   const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const path = `${stamp}/${id}.jpg`;
+  const path = `${stamp}/${input.id}.jpg`;
 
   const upload = await supabase.storage.from(BUCKET).upload(path, input.image, {
     contentType: "image/jpeg",
     cacheControl: "3600",
     upsert: false,
   });
-
   if (upload.error) {
     return { ok: false, error: `Photo upload failed: ${upload.error.message}` };
   }
 
   const row = {
-    id,
-    device_id: deviceId,
+    id: input.id,
+    device_id: getDeviceId(),
     captured_at: input.capturedAt,
     image_path: path,
     image_width: input.imageWidth,
@@ -71,6 +71,7 @@ export async function submitScreening(
     model_version: MODEL_VERSION,
     thresholds_version: input.thresholds.thresholdsVersion,
     inference_location: "on-device",
+    app_version: process.env.NEXT_PUBLIC_APP_VERSION ?? null,
 
     probability: input.probability,
     verdict: input.verdict.verdict,
@@ -78,16 +79,20 @@ export async function submitScreening(
     abstain_reason: input.verdict.reason,
     inference_ms: Math.round(input.latencyMs),
 
+    // Gate 1 / species. Raw probabilities stored so otherMax can be retuned
+    // from field data without re-running anything.
+    animal_present: input.verdict.animalPresent,
+    detected_species: input.verdict.detectedSpecies,
+    p_cattle: input.species.cattle,
+    p_buffalo: input.species.buffalo,
+    p_other: input.species.other,
+    ood_distance: input.ood,
+    species_validated: input.verdict.detectedSpecies === "cattle",
+
     blur_variance: input.quality.blurVariance,
     dark_fraction: input.quality.darkFraction,
     bright_fraction: input.quality.brightFraction,
     mean_luma: input.quality.meanLuma,
-
-    // The labels. These are the point.
-    species: input.species,
-    reported_lumps: input.lumps,
-    // Whether the model has any validated claim for this species at all.
-    species_validated: input.species === "cattle",
 
     user_agent: navigator.userAgent.slice(0, 500),
   };
@@ -96,6 +101,30 @@ export async function submitScreening(
   if (insert.error) {
     return { ok: false, error: `Saving the record failed: ${insert.error.message}` };
   }
+  return { ok: true };
+}
 
-  return { ok: true, id };
+export interface LabelInput {
+  screeningId: string;
+  species: "cattle" | "buffalo";
+  lumps: "yes" | "no" | "not_sure";
+  /** True when the person overruled the detector's species. */
+  speciesChanged: boolean;
+}
+
+export async function saveLabel(input: LabelInput): Promise<SaveResult> {
+  const pending = getSupabase();
+  if (!pending) return { ok: false, error: "Saving is not configured for this build." };
+  const supabase = await pending;
+
+  const insert = await supabase.from("screening_labels").insert({
+    screening_id: input.screeningId,
+    species: input.species,
+    reported_lumps: input.lumps,
+    species_changed: input.speciesChanged,
+  });
+  if (insert.error) {
+    return { ok: false, error: `Saving your answer failed: ${insert.error.message}` };
+  }
+  return { ok: true };
 }
