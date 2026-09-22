@@ -40,9 +40,17 @@ export interface SaveResult {
   error?: string;
 }
 
-/** Upload the photo, then insert the record -- in that order. A row pointing
- *  at a missing image is useless; an orphaned image can be reconciled later
- *  from the storage listing. */
+/**
+ * Insert the record, THEN upload the photo -- in that order.
+ *
+ * The earlier order (photo first) meant a refused insert -- schema mismatch,
+ * or now the rate limit -- left the photo in storage with no row: the
+ * invisible kind of orphan, and the one that costs money. Row-first means the
+ * rate-limit trigger on `screenings` also bounds storage growth, and
+ * migration 003 makes the storage policy refuse any upload whose path has no
+ * row. A row whose upload then fails is the visible kind of orphan: /review
+ * shows it with a grey box, and it can be retried or deleted.
+ */
 export async function saveScreening(input: ScreeningInput): Promise<SaveResult> {
   const pending = getSupabase();
   if (!pending) return { ok: false, error: "Saving is not configured for this build." };
@@ -50,15 +58,6 @@ export async function saveScreening(input: ScreeningInput): Promise<SaveResult> 
 
   const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const path = `${stamp}/${input.id}.jpg`;
-
-  const upload = await supabase.storage.from(BUCKET).upload(path, input.image, {
-    contentType: "image/jpeg",
-    cacheControl: "3600",
-    upsert: false,
-  });
-  if (upload.error) {
-    return { ok: false, error: `Photo upload failed: ${upload.error.message}` };
-  }
 
   const row = {
     id: input.id,
@@ -99,7 +98,24 @@ export async function saveScreening(input: ScreeningInput): Promise<SaveResult> 
 
   const insert = await supabase.from("screenings").insert(row);
   if (insert.error) {
-    return { ok: false, error: `Saving the record failed: ${insert.error.message}` };
+    // The rate-limit trigger raises with this prefix; say something a person
+    // can act on rather than echoing an error code.
+    const limited = /rate limit/i.test(insert.error.message);
+    return {
+      ok: false,
+      error: limited
+        ? "Too many photos saved from this phone in the last hour. The check still works; please try saving again later."
+        : `Saving the record failed: ${insert.error.message}`,
+    };
+  }
+
+  const upload = await supabase.storage.from(BUCKET).upload(path, input.image, {
+    contentType: "image/jpeg",
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (upload.error) {
+    return { ok: false, error: `Photo upload failed: ${upload.error.message}` };
   }
   return { ok: true };
 }
