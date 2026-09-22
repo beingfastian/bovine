@@ -1,0 +1,52 @@
+1: start
+2: installs ok
+3: inference rebuild == original (max diff 1.3e-07)
+4: cattle 3030  buffalo 323
+4: natural 0  hands 0  caltech 9144  scenes 24335  faces 13233
+4: caltech classes 102  novel classes 34
+4: counts {"0/test": 611, "0/train": 2419, "1/test": 81, "1/train": 242, "2/novel": 6588, "2/test": 1301, "2/train": 5255}
+4: novel sources {"caltech_novel": 2588, "scenes": 3000, "faces": 1000}
+5: 64/16497  19s
+5: 2624/16497  61s
+5: 5184/16497  104s
+5: 7744/16497  146s
+5: 10304/16497  191s
+5: 12864/16497  235s
+5: 15424/16497  285s
+5: features (16497, 960) in 332s  (unreadable files dropped: 0)
+5: SHIPPED lesion model on non-animals -- in-domain held-out n=1301: flags 23.6%;  novel n=6588: flags 12.2%
+6: head trained, epochs 26, val acc 0.9874
+7: OOD fit on 2661 bovine train features
+7: k= 64  AUROC(other-test vs bovine-test)=0.7798  median d2 bovine-test 53.9 other-test 74.7 novel 71.4
+7: k=128  AUROC(other-test vs bovine-test)=0.8513  median d2 bovine-test 105.1 other-test 165.6 novel 157.8
+7: k=192  AUROC(other-test vs bovine-test)=0.9000  median d2 bovine-test 154.6 other-test 276.4 novel 259.5
+7: k=256  AUROC(other-test vs bovine-test)=0.9304  median d2 bovine-test 205.4 other-test 406.1 novel 368.8
+7: k=384  AUROC(other-test vs bovine-test)=0.9561  median d2 bovine-test 307.6 other-test 703.1 novel 618.2
+7: chosen k=384
+7: sweep done
+8: head held-out acc {"cattle": 0.9852700490998363, "buffalo": 1.0, "other": 0.9884704073789393}  confusion [[602, 2, 7], [0, 81, 0], [14, 1, 1286]]
+8: species {"overall_acc": 0.9971098265895953, "cattle_as_cattle": 0.9967266775777414, "buffalo_as_buffalo": 1.0, "per_breed": {"Khundi": {"n": 19, "acc": 1.0}, "Mix": {"n": 34, "acc": 1.0}, "Neli Ravi": {"n": 28, "acc": 1.0}}}
+9: combined model built; d2 in-graph vs numpy rel err 1.21e-07
+10: exported  outputs ['lesion', 'species', 'ood']  fp32 14.55 MB  fp16 7.37 MB
+11: cattle test 100/611
+11: cattle test 200/611
+11: cattle test 300/611
+11: cattle test 400/611
+11: cattle test 500/611
+11: cattle test 600/611
+11: {"lesion": {"fp32_vs_keras_max_abs_diff": 2.8014183044433594e-06, "fp16_vs_fp32_max_abs_diff": 0.00883406400680542, "fp16_decision_agreement": 1.0, "test_metrics_fp32": {"balanced_accuracy": 0.9089718754484144, "tp": 389, "tn": 177, "fp": 30, "fn": 15}, "test_metrics_fp16": {"balanced_accuracy": 0.9089718754484144, "tp": 389, "tn": 177, "fp": 30, "fn": 15}}, "ood": {"fp32_vs_numpy_max_rel_err": 2.969421683728807e-06, "fp16_vs_fp32_max_rel_err": 0.015905300010346762, "fp16_vs_fp32_gate_agreement_at_D": {"0.98": 0.9983633387888707, "0.99": 1.0, "0.995": 0.9983633387888707, "0.999": 1.0}}, "species_cattle_test": {"fp16_vs_fp32_argmax_agreement": 1.0, "onnx_vs_keras_max_abs_diff": 2.6226043701171875e-06}}
+11: novel 500/6588
+11: novel 1000/6588
+11: novel 1500/6588
+11: novel 2000/6588
+11: novel 2500/6588
+11: novel 3000/6588
+11: novel 3500/6588
+11: novel 4000/6588
+11: novel 4500/6588
+11: novel 5000/6588
+11: novel 5500/6588
+11: novel 6000/6588
+11: novel 6500/6588
+11: novel (fp16, combined) {"keep0.98_T0.7": 0.8574681238615665, "keep0.98_T0.8": 0.8260473588342441, "keep0.98_T0.9": 0.7833940497874924, "keep0.98_oodonly": 0.463418336369156, "keep0.99_T0.7": 0.8372799028536734, "keep0.99_T0.8": 0.7991803278688525, "keep0.99_T0.9": 0.7437765634486946, "keep0.99_oodonly": 0.36020036429872493, "keep0.995_T0.7": 0.8257437765634487, "keep0.995_T0.8": 0.7843047965998786, "keep0.995_T0.9": 0.7232847601700061, "keep0.995_oodonly": 0.2937158469945355, "keep0.999_T0.7": 0.8006982392228293, "keep0.999_T0.8": 0.7484820886460231, "keep0.999_T0.9": 0.6731936854887675, "keep0.999_oodonly": 0.0588949605343048}
+12: gate_report.json written; outputs ['bi-lsd-mnv3l-v1.0.0-gate.fp16.onnx', 'bi-lsd-mnv3l-v1.0.0-gate.onnx', 'gate_report.json', 'progress.txt', 'test_lesion_probs_fp16.npy', 'test_ood_d2_fp16.npy', 'tf2onnx.log']

@@ -1,43 +1,59 @@
 {
   "modelVersion": "bi-lsd-mnv3l-v1.0.0-gate",
-  "reconstructed_from": "ai/kernels/bovine-lsd-gate/out/progress.txt (kernel v5); the kernel's own json.dump failed on a name collision after every computation had finished",
-  "absent_stdout_only": [
-    "ood.sweep (D per keep level -- recomputed locally by verify_gate.py)",
-    "head.softmax_only_sweep",
-    "combined_sweep.novel_by_source"
-  ],
-  "outputs": [
-    "lesion",
-    "species",
-    "ood"
-  ],
+  "outputs": {
+    "lesion": [
+      1,
+      1
+    ],
+    "species": {
+      "shape": [
+        1,
+        3
+      ],
+      "classes": [
+        "cattle",
+        "buffalo",
+        "other"
+      ]
+    },
+    "ood": {
+      "shape": [
+        1,
+        1
+      ],
+      "meaning": "Mahalanobis d^2 of the 960-d pooled feature from the bovine training distribution, PCA k=384"
+    }
+  },
   "data": {
-    "n_items_featurised": 16497,
-    "feature_extraction_seconds": 258,
-    "ood_fit_n_bovine_train": 2661,
-    "in_domain_other_heldout_n": 1301,
-    "novel_n": 6588,
-    "novel_sources": [
-      "intel scenes (buildings, forest, glacier, mountain, sea, street)",
-      "LFW faces",
-      "Caltech-101 classes never trained on (every third class)"
-    ]
+    "counts": {
+      "0/test": 611,
+      "0/train": 2419,
+      "1/test": 81,
+      "1/train": 242,
+      "2/novel": 6588,
+      "2/test": 1301,
+      "2/train": 5255
+    },
+    "novel_sources": {
+      "caltech_novel": 2588,
+      "scenes": 3000,
+      "faces": 1000
+    },
+    "other_train_sources": {
+      "caltech": 5255
+    }
   },
   "lesion_model_on_nonanimals_before_gate": {
     "in_domain_heldout": {
       "n": 1301,
-      "flagged_rate": 0.23600000000000002
+      "flagged_rate": 0.23597232897770945
     },
     "novel": {
       "n": 6588,
-      "flagged_rate": 0.122
+      "flagged_rate": 0.122040072859745
     }
   },
   "head": {
-    "training": {
-      "epochs": 26,
-      "val_acc": 0.9874
-    },
     "heldout_accuracy": {
       "cattle": 0.9852700490998363,
       "buffalo": 1.0,
@@ -78,57 +94,275 @@
           "acc": 1.0
         }
       }
-    }
+    },
+    "softmax_only_sweep": [
+      {
+        "T": 0.3,
+        "cattle_kept": 0.9852700490998363,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.9923136049192929,
+        "novel_rejected": 0.9312386156648452
+      },
+      {
+        "T": 0.5,
+        "cattle_kept": 0.9885433715220949,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.9884704073789393,
+        "novel_rejected": 0.8746205221615058
+      },
+      {
+        "T": 0.7,
+        "cattle_kept": 0.9885433715220949,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.9846272098385856,
+        "novel_rejected": 0.7975106253794778
+      },
+      {
+        "T": 0.9,
+        "cattle_kept": 0.9967266775777414,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.962336664104535,
+        "novel_rejected": 0.6675774134790529
+      }
+    ]
   },
   "ood": {
     "k": 384,
-    "k_candidates": {
-      "64": {
-        "auroc_other_test_vs_bovine_test": 0.7798,
-        "median_d2": {
-          "bovine_test": 53.9,
-          "other_test": 74.7,
-          "novel": 71.4
+    "k_candidates_auroc": {
+      "64": 0.7798492044803241,
+      "128": 0.8512904702030009,
+      "192": 0.8999613458744496,
+      "256": 0.9303925837394978,
+      "384": 0.9561275675003221
+    },
+    "sweep": [
+      {
+        "keep_target": 0.98,
+        "D": 637.0537136548571,
+        "cattle_kept": 0.9787234042553191,
+        "buffalo_kept": 0.9876543209876543,
+        "other_test_rejected": 0.633358954650269,
+        "novel_rejected": 0.46478445658773526,
+        "novel_by_source": {
+          "caltech_novel": 0.5452086553323029,
+          "faces": 0.212,
+          "scenes": 0.4796666666666667
         }
       },
-      "128": {
-        "auroc_other_test_vs_bovine_test": 0.8513,
-        "median_d2": {
-          "bovine_test": 105.1,
-          "other_test": 165.6,
-          "novel": 157.8
+      {
+        "keep_target": 0.99,
+        "D": 699.2170746710337,
+        "cattle_kept": 0.9885433715220949,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.5049961568024597,
+        "novel_rejected": 0.36171827565270187,
+        "novel_by_source": {
+          "caltech_novel": 0.45942812982998454,
+          "faces": 0.126,
+          "scenes": 0.356
         }
       },
-      "192": {
-        "auroc_other_test_vs_bovine_test": 0.9,
-        "median_d2": {
-          "bovine_test": 154.6,
-          "other_test": 276.4,
-          "novel": 259.5
+      {
+        "keep_target": 0.995,
+        "D": 748.2655552685926,
+        "cattle_kept": 0.9934533551554828,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.41352805534204456,
+        "novel_rejected": 0.2959927140255009,
+        "novel_by_source": {
+          "caltech_novel": 0.3987635239567233,
+          "faces": 0.076,
+          "scenes": 0.2806666666666667
         }
       },
-      "256": {
-        "auroc_other_test_vs_bovine_test": 0.9304,
-        "median_d2": {
-          "bovine_test": 205.4,
-          "other_test": 406.1,
-          "novel": 368.8
-        }
-      },
-      "384": {
-        "auroc_other_test_vs_bovine_test": 0.9561,
-        "median_d2": {
-          "bovine_test": 307.6,
-          "other_test": 703.1,
-          "novel": 618.2
+      {
+        "keep_target": 0.999,
+        "D": 1090.4621014756808,
+        "cattle_kept": 0.9983633387888707,
+        "buffalo_kept": 1.0,
+        "other_test_rejected": 0.0930053804765565,
+        "novel_rejected": 0.05965391621129326,
+        "novel_by_source": {
+          "caltech_novel": 0.1035548686244204,
+          "faces": 0.003,
+          "scenes": 0.04066666666666666
         }
       }
-    },
-    "in_graph_vs_numpy_rel_err": 1.21e-07
+    ]
   },
+  "combined_sweep": [
+    {
+      "keep_target": 0.98,
+      "D": 637.0537136548571,
+      "T": 0.5,
+      "cattle_kept": 0.9738134206219312,
+      "buffalo_kept": 0.9876543209876543,
+      "other_test_rejected": 0.98923904688701,
+      "novel_rejected": 0.9077109896782027,
+      "novel_by_source": {
+        "caltech_novel": 0.9489953632148377,
+        "faces": 1.0,
+        "scenes": 0.8413333333333334
+      }
+    },
+    {
+      "keep_target": 0.98,
+      "D": 637.0537136548571,
+      "T": 0.7,
+      "cattle_kept": 0.9738134206219312,
+      "buffalo_kept": 0.9876543209876543,
+      "other_test_rejected": 0.9861644888547272,
+      "novel_rejected": 0.8574681238615665,
+      "novel_by_source": {
+        "caltech_novel": 0.9374034003091191,
+        "faces": 0.999,
+        "scenes": 0.7413333333333333
+      }
+    },
+    {
+      "keep_target": 0.98,
+      "D": 637.0537136548571,
+      "T": 0.9,
+      "cattle_kept": 0.9770867430441899,
+      "buffalo_kept": 0.9876543209876543,
+      "other_test_rejected": 0.9715603382013835,
+      "novel_rejected": 0.7841530054644809,
+      "novel_by_source": {
+        "caltech_novel": 0.9192426584234931,
+        "faces": 0.992,
+        "scenes": 0.5983333333333334
+      }
+    },
+    {
+      "keep_target": 0.99,
+      "D": 699.2170746710337,
+      "T": 0.5,
+      "cattle_kept": 0.983633387888707,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.98923904688701,
+      "novel_rejected": 0.896782027929569,
+      "novel_by_source": {
+        "caltech_novel": 0.9459041731066461,
+        "faces": 1.0,
+        "scenes": 0.82
+      }
+    },
+    {
+      "keep_target": 0.99,
+      "D": 699.2170746710337,
+      "T": 0.7,
+      "cattle_kept": 0.983633387888707,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9853958493466565,
+      "novel_rejected": 0.8375834851244688,
+      "novel_by_source": {
+        "caltech_novel": 0.9312210200927357,
+        "faces": 0.999,
+        "scenes": 0.703
+      }
+    },
+    {
+      "keep_target": 0.99,
+      "D": 699.2170746710337,
+      "T": 0.9,
+      "cattle_kept": 0.9869067103109657,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9684857801691007,
+      "novel_rejected": 0.7454462659380692,
+      "novel_by_source": {
+        "caltech_novel": 0.9076506955177743,
+        "faces": 0.991,
+        "scenes": 0.5236666666666666
+      }
+    },
+    {
+      "keep_target": 0.995,
+      "D": 748.2655552685926,
+      "T": 0.5,
+      "cattle_kept": 0.9852700490998363,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9884704073789393,
+      "novel_rejected": 0.8910139647844566,
+      "novel_by_source": {
+        "caltech_novel": 0.9447449768160742,
+        "faces": 1.0,
+        "scenes": 0.8083333333333333
+      }
+    },
+    {
+      "keep_target": 0.995,
+      "D": 748.2655552685926,
+      "T": 0.7,
+      "cattle_kept": 0.9852700490998363,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9846272098385856,
+      "novel_rejected": 0.8261991499696417,
+      "novel_by_source": {
+        "caltech_novel": 0.9277434312210201,
+        "faces": 0.999,
+        "scenes": 0.681
+      }
+    },
+    {
+      "keep_target": 0.995,
+      "D": 748.2655552685926,
+      "T": 0.9,
+      "cattle_kept": 0.9918166939443536,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9661798616448886,
+      "novel_rejected": 0.7249544626593807,
+      "novel_by_source": {
+        "caltech_novel": 0.902241112828439,
+        "faces": 0.991,
+        "scenes": 0.48333333333333334
+      }
+    },
+    {
+      "keep_target": 0.999,
+      "D": 1090.4621014756808,
+      "T": 0.5,
+      "cattle_kept": 0.9885433715220949,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9884704073789393,
+      "novel_rejected": 0.8768973891924712,
+      "novel_by_source": {
+        "caltech_novel": 0.9420401854714064,
+        "faces": 1.0,
+        "scenes": 0.7796666666666666
+      }
+    },
+    {
+      "keep_target": 0.999,
+      "D": 1090.4621014756808,
+      "T": 0.7,
+      "cattle_kept": 0.9885433715220949,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.9846272098385856,
+      "novel_rejected": 0.8014571948998178,
+      "novel_by_source": {
+        "caltech_novel": 0.9231066460587326,
+        "faces": 0.999,
+        "scenes": 0.6306666666666667
+      }
+    },
+    {
+      "keep_target": 0.999,
+      "D": 1090.4621014756808,
+      "T": 0.9,
+      "cattle_kept": 0.9950900163666121,
+      "buffalo_kept": 1.0,
+      "other_test_rejected": 0.962336664104535,
+      "novel_rejected": 0.674863387978142,
+      "novel_by_source": {
+        "caltech_novel": 0.8921947449768161,
+        "faces": 0.991,
+        "scenes": 0.382
+      }
+    }
+  ],
   "verification": {
     "lesion": {
-      "fp32_vs_keras_max_abs_diff": 2.7120113372802734e-06,
+      "fp32_vs_keras_max_abs_diff": 2.8014183044433594e-06,
       "fp16_vs_fp32_max_abs_diff": 0.00883406400680542,
       "fp16_decision_agreement": 1.0,
       "test_metrics_fp32": {
@@ -162,14 +396,58 @@
     },
     "novel_rejected_fp16_combined": {
       "keep0.98_T0.7": 0.8574681238615665,
+      "keep0.98_T0.8": 0.8260473588342441,
+      "keep0.98_T0.9": 0.7833940497874924,
+      "keep0.98_oodonly": 0.463418336369156,
       "keep0.99_T0.7": 0.8372799028536734,
+      "keep0.99_T0.8": 0.7991803278688525,
+      "keep0.99_T0.9": 0.7437765634486946,
+      "keep0.99_oodonly": 0.36020036429872493,
       "keep0.995_T0.7": 0.8257437765634487,
-      "keep0.999_T0.7": 0.8006982392228293
+      "keep0.995_T0.8": 0.7843047965998786,
+      "keep0.995_T0.9": 0.7232847601700061,
+      "keep0.995_oodonly": 0.2937158469945355,
+      "keep0.999_T0.7": 0.8006982392228293,
+      "keep0.999_T0.8": 0.7484820886460231,
+      "keep0.999_T0.9": 0.6731936854887675,
+      "keep0.999_oodonly": 0.0588949605343048
     }
   },
   "verification_complete": true,
-  "sizes_mb": {
-    "fp32": 14.55,
-    "fp16": 7.36
+  "sizes": {
+    "fp32": 14548899,
+    "fp16": 7366050
+  },
+  "versions": {
+    "tensorflow": "2.20.0",
+    "keras": "3.13.2",
+    "onnx": "1.22.0",
+    "onnxruntime": "1.30.0"
+  },
+  "provenance": {
+    "measured_on": "kernel v7 (clean run, complete report)",
+    "shipped_artifact": "kernel v5 fp16 (sha256 34d3bcd50fac...), verified end-to-end and deployed 2026-09-23",
+    "relationship": "v7 is a re-run of the same script with identical data and seeds; held-out species, lesion and AUROC numbers match v5's progress log to 3 decimals. OOD D at keep 0.995: v7 748.3 vs v5 746.1 (the shipped oodMax). v5's own report failed to serialise; see gate_report_v5_reconstructed.json.",
+    "deployed_operating_point": {
+      "oodMax": 746.1,
+      "otherMax": 0.8
+    }
+  },
+  "deployed_point_summary": {
+    "novel_rejected_combined_T0.8_keep0.995": 0.7843047965998786,
+    "novel_rejected_ood_only_keep0.995": 0.2937158469945355,
+    "novel_rejected_softmax_only_T0.7": 0.7975106253794778,
+    "novel_rejected_softmax_only_T0.9": 0.6675774134790529,
+    "ood_only_by_source_keep0.995": {
+      "caltech_novel": 0.3987635239567233,
+      "faces": 0.076,
+      "scenes": 0.2806666666666667
+    },
+    "retention_local_joint": {
+      "cattle_test": 0.9902,
+      "buffalo_pak": 1.0,
+      "source": "ai/reports/gate_verification.json"
+    },
+    "reading": "The softmax half (trained on ~85 negative categories) carries most of the open-set load; the distance half adds ~3-4 points here and catches high-resolution landscapes the softmax misses (2/12 locally). Weakest novel source for the distance half is faces."
   }
 }

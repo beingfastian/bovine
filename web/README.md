@@ -155,8 +155,11 @@ the bovine training distribution (`ood`), which is open-set: it does not need
 to have seen the category. The softmax's `p(other)` is kept as a cheap second
 opinion for the negative categories it *was* shown. Held-out: species
 cattle→cattle 99.7%, buffalo→buffalo 100%; OOD AUROC 0.956; on 6,588
-non-animal photos from categories never trained on, the combined gate rejects
-~83%, while keeping 99.0% of held-out cattle and 100% of buffalo. The six
+non-animal photos from categories never trained on, the shipped gate rejects
+**78%** (distance alone 29%, softmax alone ~75% — the softmax carries most of
+it once its negatives are broad; the distance term is what catches
+high-resolution landscapes), while keeping 99.0% of held-out cattle and 100%
+of buffalo. The six
 cattle photos it does turn away are itemised in
 `../ai/reports/gate_rejected_cattle_inspection.json` — four are dataset
 contamination (a screenshot, a cartoon, a statue, an antelope). Full numbers in

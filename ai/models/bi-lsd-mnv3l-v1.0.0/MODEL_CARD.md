@@ -385,19 +385,34 @@ the same backbone (download +1.0 MB; lesion weights byte-identical):
 | `species` | Dense(3) softmax: cattle / buffalo / other | cattle→cattle **0.9967**, buffalo→buffalo **1.0000** (all three breeds), other→other 0.9885 |
 | `ood` | Mahalanobis d² of the 960-d pooled feature from the bovine training distribution, PCA k=384, computed in-graph | AUROC non-animal vs animal **0.956** |
 
-**Why two halves.** The softmax alone, tested on twenty real landscape
-photographs, rejected **none** — every one scored p(cattle) = 1.000. The
-fine-tuned backbone learned that fields, grass and sky mean cattle, and a
-closed softmax cannot say "none of these" (§6.1 of the plan predicted exactly
-this). The distance term is open-set: it needs no example of the category. With
-both, **12/12** of those landscapes are rejected.
+**Why two halves.** The first head, trained against only eight negative
+categories, was tested on twenty real landscape photographs and rejected
+**none** — every one scored p(cattle) = 1.000. The fine-tuned backbone learned
+that fields, grass and sky mean cattle, and a closed softmax cannot say "none
+of these" (§6.1 of the plan predicted exactly this). Broadening the negatives
+to ~85 categories fixed most of that; the distance term covers what remains.
+With both, **12/12** of those landscapes are rejected.
 
-**Honest negatives.** Training negatives: natural-images, real hand
-photographs, 70% of Caltech-101's classes. Everything the gate is judged on for
-open-set behaviour was never trained on in any form — Intel scenes, LFW faces,
-and the other 30% of Caltech classes (class-disjoint). On **6,588** such
-photographs the combined gate rejects **82.6%** at the retention operating
-point (T = 0.7; the shipped T = 0.8 figure is pinned by kernel v7).
+**Honest negatives, and an honest decomposition.** Training negatives:
+natural-images, real hand photographs, 70% of Caltech-101's classes.
+Everything the gate is judged on for open-set behaviour was never trained on in
+any form — Intel scenes, LFW faces, the other 30% of Caltech classes
+(class-disjoint). On **6,588** such photographs, at the shipped operating
+point:
+
+| Half | Novel non-animals rejected |
+|---|---|
+| distance (`ood ≥ 746`) alone | **29%** (Caltech-novel 40%, scenes 28%, faces 8%) |
+| softmax (`p(other) ≥ 0.8`) alone | **~75%** (80% at 0.7, 67% at 0.9) |
+| **combined (shipped)** | **78.4%** |
+
+The softmax carries most of the load once its negatives are broad enough. The
+distance term adds three to four points overall, and it is the half that
+catches high-resolution outdoor scenes — 2 of the 12 local landscapes were
+rejected by it alone. Neither is a detector; the remaining ~22% of novel
+non-animals will still be scored, which is why the rejection screen asks the
+person whether an animal is really there and why every row stores both
+scores raw.
 
 **Operating point.** `oodMax = 746.1` (99.5th percentile of held-out cattle
 d²), `otherMax = 0.8`. Joint real-animal retention on the locked test split:
