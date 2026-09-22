@@ -118,15 +118,13 @@ revoke all on public.collection_summary from anon;
 grant select on public.collection_summary to authenticated;
 
 -- ------------------------------------------------------------------ cleanup
--- Rows and photos created by the automated end-to-end test on 2026-09-20.
+-- Rows created by the automated end-to-end test on 2026-09-20. Their photos,
+-- and any photo whose row insert failed, become unreachable orphans in the
+-- bucket. Supabase refuses direct SQL deletes on storage.objects
+-- ("Use the Storage API instead" -- the storage.protect_delete trigger), and
+-- since the editor runs a paste as ONE transaction, a refused statement rolls
+-- back everything before it. So storage is not touched here. Remove orphans,
+-- if you care about the few hundred kB, from Dashboard -> Storage ->
+-- screenings: the folders `_setup_check/` and `2026-09-20/`, plus any file
+-- with no matching row.
 delete from public.screenings where user_agent ilike '%HeadlessChrome%';
-delete from storage.objects
-where bucket_id = 'screenings'
-  and (name like '_setup_check/%' or name like '2026-09-20/%');
-
--- Photos whose row insert failed (the client uploads first, then inserts; a
--- schema mismatch between app and database leaves the photo with no row).
--- Safe to re-run at any time: a photo with no screening row is unreachable.
-delete from storage.objects
-where bucket_id = 'screenings'
-  and name not in (select image_path from public.screenings where image_path is not null);
