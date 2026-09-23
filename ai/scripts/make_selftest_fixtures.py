@@ -30,7 +30,7 @@ import onnxruntime as ort
 from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
-ONNX_PATH = ROOT / "ai/models/bi-lsd-mnv3l-v1.0.0/bi-lsd-mnv3l-v1.0.0-gate.onnx"
+ONNX_PATH = ROOT / "ai/models/bi-lsd-mnv3l-v1.0.0/bi-lsd-mnv3l-v1.0.0-gate-D.onnx"
 BUNDLE = ROOT / "ai/data/bovine_lsd_bundle.zip"
 BUFFALO = ROOT / "ai/data/_upload_buffalo/buffalo_pak_256.zip"
 OUT_DIR = ROOT / "web/public/fixtures"
@@ -129,7 +129,7 @@ def main() -> None:
         print(f"  {name}  p={p:.4f}  species={CLASSES[int(spe.argmax())]:7} p_other={spe[2]:.3f}  {r['breed']}")
 
     OUT_JSON.write_text(json.dumps({
-        "modelVersion": "bi-lsd-mnv3l-v1.0.0-gate",
+        "modelVersion": "bi-lsd-mnv3l-v1.0.0-gate-D",
         "generatedBy": "ai/scripts/make_selftest_fixtures.py",
         "note": ("expectedProbability / expectedSpecies / expectedOther are the verified fp32 ONNX model's "
                  "outputs in Python, using PIL bilinear resize to 224x224 on raw [0,255] RGB. The browser "

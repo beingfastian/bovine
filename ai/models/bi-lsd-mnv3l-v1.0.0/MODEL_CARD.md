@@ -423,6 +423,36 @@ fibreglass statue, an antelope, a distant herd, and one genuine loss — calves
 in coats at d² = 747. Four of the six are the training-data contamination §6
 already documented; the gate now catches it at inference.
 
+### Gate arms study — FROZEN ARTIFACT `bi-lsd-mnv3l-v1.0.0-gate-D` (2026-09-24)
+
+One run, four arms on identical data, choice rule written before the run
+(`ai/scripts/build_gate_arms_notebook.py`, `ai/reports/gate_arms_report.json`).
+Thresholds and PCA size chosen on a validation carve-out; the novel set split in
+half — one half chose the arm, the other half is the number below.
+
+| Arm | Change | Novel non-animals rejected (report half, n=3,287) | Cattle kept | Diseased kept | Buffalo kept |
+|---|---|---|---|---|---|
+| A | previous method | 75.6% | 99.51% | 99.75% | 100% |
+| B | ℓ2-normalised Mahalanobis (Mahalanobis++) | 83.7% | 99.51% | 99.75% | 100% |
+| C | + 29 farm/built-environment textures as outliers | 83.1% | 99.35% | 99.50% | 100% |
+| **D** | **both — shipped** | **87.7%** | **99.51%** | **99.50%** | **100%** |
+
+Mild cases kept: 100% in every arm. Normalisation lifted distance AUROC on
+validation from 0.970 to 0.996. Arm D's shipped thresholds: `oodMax = 1328.2`,
+`otherMax = 0.95`. Verified through the exported fp16 file: lesion confusion
+matrix unchanged (389/177/30/15), 87.8% novel rejection, 12/12 real landscapes
+rejected locally, browser parity PASS.
+
+**Safety design:** 18 DTD textures that resemble lumpy hide (bumpy, pitted,
+studded, scaly, blotchy, wrinkled…) were **never trained on** in any arm, so the
+gate cannot learn to reject close-up skin photographs; diseased-animal retention
+≥ 99% was a hard eligibility condition. On that held-out probe, the shipped
+lesion model alone would have flagged **48%** of those textures as "possible
+condition"; the gate rejects 95% of them before the lesion model is consulted.
+
+**Model frozen for field collection.** No further changes before the field
+study, so field results compare directly against the numbers in this card.
+
 **Not measured:** field photographs. Every number above is web-sourced or
 curated. The gate stores `p_other` and `ood_distance` raw on every field row
 precisely so both thresholds can be retuned from real data.

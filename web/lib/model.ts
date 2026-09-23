@@ -27,7 +27,7 @@
 /** Lesion weights are bi-lsd-mnv3l-v1.0.0, byte-for-byte. "-gate" marks the
  *  artifact that carries the extra species head, so rows in the database can
  *  tell the two apart. */
-export const MODEL_VERSION = "bi-lsd-mnv3l-v1.0.0-gate";
+export const MODEL_VERSION = "bi-lsd-mnv3l-v1.0.0-gate-D";
 
 /**
  * float16 weights, fp32 in and out.
@@ -85,12 +85,12 @@ export interface Thresholds {
 /** Mirrors public/thresholds.json, so a failed config fetch lands on the same
  *  operating point rather than a silently different one. */
 export const DEFAULT_THRESHOLDS: Thresholds = {
-  thresholdsVersion: "2026-09-23b",
+  thresholdsVersion: "2026-09-24-armD",
   tau: 0.5,
   unclearLow: 0.4,
   unclearHigh: 0.6,
-  otherMax: 0.8,
-  oodMax: 746.1,
+  otherMax: 0.95,
+  oodMax: 1328.2,
   blurVarianceMin: 120,
   clippedFractionMax: 0.35,
 };

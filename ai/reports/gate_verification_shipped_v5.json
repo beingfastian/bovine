@@ -1,12 +1,12 @@
 {
   "artifacts": {
     "new_fp32": {
-      "file": "bi-lsd-mnv3l-v1.0.0-gate-D.onnx",
-      "bytes": 15503842
+      "file": "bi-lsd-mnv3l-v1.0.0-gate.onnx",
+      "bytes": 14547686
     },
     "new_fp16": {
-      "file": "bi-lsd-mnv3l-v1.0.0-gate-D.fp16.onnx",
-      "bytes": 7846795
+      "file": "bi-lsd-mnv3l-v1.0.0-gate.fp16.onnx",
+      "bytes": 7364839
     },
     "shipped_fp16": {
       "file": "bi-lsd-mnv3l-v1.0.0.fp16.onnx",
@@ -33,24 +33,24 @@
     }
   },
   "cattle_test_species": {
-    "detected_cattle": 0.983633387888707,
-    "detected_buffalo": 0.0016366612111292963,
-    "detected_other": 0.014729950900163666,
-    "p_other_p50": 4.720396100310609e-05,
-    "p_other_p99": 0.750599902868268,
-    "fp16_vs_fp32_argmax_agreement": 0.9983633387888707
+    "detected_cattle": 0.9852700490998363,
+    "detected_buffalo": 0.0032733224222585926,
+    "detected_other": 0.011456628477905073,
+    "p_other_p50": 0.0003396197280380875,
+    "p_other_p99": 0.6870338708162244,
+    "fp16_vs_fp32_argmax_agreement": 1.0
   },
   "cattle_test_ood": {
-    "d2_p50": 447.9294128417969,
-    "d2_p99": 998.9883422851555,
-    "d2_p995": 1107.4036437988316,
-    "d2_max": 1177.54345703125,
-    "fp16_vs_fp32_max_rel_err": 0.01197766702487294
+    "d2_p50": 321.3154296875,
+    "d2_p99": 699.2161254882811,
+    "d2_p995": 748.2653137207038,
+    "d2_max": 1356.889404296875,
+    "fp16_vs_fp32_max_rel_err": 0.015905300010346762
   },
   "buffalo_pak_ood": {
-    "d2_p50": 264.1150665283203,
-    "d2_p99": 617.10168762207,
-    "d2_max": 655.8277587890625
+    "d2_p50": 202.29756927490234,
+    "d2_p99": 503.96371063232414,
+    "d2_max": 683.7939453125
   },
   "buffalo_pak_species": {
     "caveat": "includes the head's training images; see gate_report.json for held-out",
@@ -64,36 +64,36 @@
       },
       "Mix": {
         "n": 137,
-        "detected_buffalo": 0.9927007299270073
+        "detected_buffalo": 1.0
       },
       "Neli Ravi": {
         "n": 112,
-        "detected_buffalo": 0.9910714285714286
+        "detected_buffalo": 0.9821428571428571
       }
     },
     "lesion_false_alarm_rate": 0.09259259259259259
   },
   "ood_gate": {
-    "recommendedOodMax": 1328.2,
+    "recommendedOodMax": 746.1,
     "source": "fixed (GATE_OOD_MAX)",
-    "local_cattle_test_kept": 1.0,
+    "local_cattle_test_kept": 0.9934533551554828,
     "local_buffalo_kept": 1.0
   },
   "joint_retention_local": {
-    "cattle_test": 0.9950900163666121,
-    "lesion_positive_cattle_test": 0.995049504950495,
+    "cattle_test": 0.9901800327332242,
+    "lesion_positive_cattle_test": 0.9975247524752475,
     "buffalo_pak": 1.0
   },
   "gate": {
     "keep_min": 0.99,
-    "recommendedOtherMax": 0.95,
+    "recommendedOtherMax": 0.8,
     "at_threshold": {
-      "T": 0.95,
-      "cattle_kept": 0.9950900163666121,
+      "T": 0.8,
+      "cattle_kept": 0.9934533551554828,
       "buffalo_kept": 1.0,
       "other_rejected": null
     },
-    "local_cattle_test_kept": 0.9950900163666121,
+    "local_cattle_test_kept": 0.9901800327332242,
     "kernel_heldout_accuracy": null,
     "kernel_species": null,
     "lesion_model_on_nonanimals_before_gate": null
@@ -101,28 +101,29 @@
   "nonanimal_local": [
     {
       "file": "img14.jpg",
-      "p_other": 0.9999996423721313,
-      "d2": 1180.283447265625,
+      "p_other": 0.9997109770774841,
+      "d2": 1503.622314453125,
       "lesion_p": 1.7762184143066406e-05,
       "rejected": true,
       "by": [
+        "ood",
         "softmax"
       ]
     },
     {
       "file": "img50.jpg",
-      "p_other": 0.9898275136947632,
-      "d2": 857.1514282226562,
+      "p_other": 0.5548190474510193,
+      "d2": 787.600830078125,
       "lesion_p": 0.35515737533569336,
       "rejected": true,
       "by": [
-        "softmax"
+        "ood"
       ]
     },
     {
       "file": "img20.jpg",
-      "p_other": 0.9995651841163635,
-      "d2": 1876.0738525390625,
+      "p_other": 0.907414436340332,
+      "d2": 821.9509887695312,
       "lesion_p": 0.004204243421554565,
       "rejected": true,
       "by": [
@@ -132,19 +133,18 @@
     },
     {
       "file": "img21.jpg",
-      "p_other": 0.9983653426170349,
-      "d2": 1851.2393798828125,
+      "p_other": 0.8583290576934814,
+      "d2": 725.6591186523438,
       "lesion_p": 0.003994613885879517,
       "rejected": true,
       "by": [
-        "ood",
         "softmax"
       ]
     },
     {
       "file": "img22.jpg",
-      "p_other": 0.9998125433921814,
-      "d2": 1847.1707763671875,
+      "p_other": 0.9282709360122681,
+      "d2": 1026.2845458984375,
       "lesion_p": 0.003275275230407715,
       "rejected": true,
       "by": [
@@ -154,8 +154,8 @@
     },
     {
       "file": "img23.jpg",
-      "p_other": 0.9998182654380798,
-      "d2": 1825.6617431640625,
+      "p_other": 0.9395788908004761,
+      "d2": 956.010009765625,
       "lesion_p": 0.0023565292358398438,
       "rejected": true,
       "by": [
@@ -165,48 +165,52 @@
     },
     {
       "file": "img24.jpg",
-      "p_other": 0.9994786381721497,
-      "d2": 1040.287353515625,
+      "p_other": 0.9841267466545105,
+      "d2": 1000.022705078125,
       "lesion_p": 0.00036919116973876953,
       "rejected": true,
       "by": [
+        "ood",
         "softmax"
       ]
     },
     {
       "file": "img25.jpg",
-      "p_other": 0.9996691942214966,
-      "d2": 1131.415283203125,
+      "p_other": 0.9796270132064819,
+      "d2": 1039.528564453125,
       "lesion_p": 0.0005624890327453613,
       "rejected": true,
       "by": [
+        "ood",
         "softmax"
       ]
     },
     {
       "file": "img26.jpg",
-      "p_other": 1.0,
-      "d2": 1265.008056640625,
+      "p_other": 0.9997009038925171,
+      "d2": 1514.8240966796875,
       "lesion_p": 0.000635981559753418,
       "rejected": true,
       "by": [
+        "ood",
         "softmax"
       ]
     },
     {
       "file": "img27.jpg",
-      "p_other": 0.9993500113487244,
-      "d2": 1150.069091796875,
+      "p_other": 0.9193642735481262,
+      "d2": 1573.955322265625,
       "lesion_p": 3.471970558166504e-05,
       "rejected": true,
       "by": [
+        "ood",
         "softmax"
       ]
     },
     {
       "file": "img28.jpg",
-      "p_other": 0.993817150592804,
-      "d2": 1109.082763671875,
+      "p_other": 0.8124216198921204,
+      "d2": 595.72900390625,
       "lesion_p": 0.005029946565628052,
       "rejected": true,
       "by": [
@@ -215,8 +219,8 @@
     },
     {
       "file": "img29.jpg",
-      "p_other": 0.8553321957588196,
-      "d2": 1338.841064453125,
+      "p_other": 0.3401976525783539,
+      "d2": 775.8228759765625,
       "lesion_p": 0.0211506187915802,
       "rejected": true,
       "by": [

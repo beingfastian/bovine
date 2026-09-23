@@ -1,0 +1,247 @@
+{
+  "study": "gate arms A/B/C/D (research plan P1)",
+  "choice": "D",
+  "choice_reason": "beats A by >1 point on novel_select; fewest changes within 1 point of best",
+  "rule": "eligible = test retention >= 0.99 for cattle, buffalo and lesion-positive cattle; choose highest novel_select rejection; within 1 point, fewest changes; must beat A by >1 point",
+  "thresholds_chosen_on": "validation carve-out (10% of train); k chosen on validation AUROC",
+  "arms": {
+    "A": {
+      "D": 1628.4459277500152,
+      "T": 0.9,
+      "retention": {
+        "cattle_test": 0.9950900163666121,
+        "buffalo_test": 1.0,
+        "lesion_positive_test": 0.9975247524752475,
+        "mild_test": 1.0
+      },
+      "rejection": {
+        "novel_select": 0.7640109057861254,
+        "novel_report": 0.7557042896257986,
+        "novel_report_by_source": {
+          "caltech_novel": 0.9227166276346604,
+          "faces": 0.9979959919839679,
+          "scenes": 0.5335102853351028
+        },
+        "other_test": 0.9775739041794088,
+        "dtd_farm_test": 0.8236151603498543,
+        "lesionlike_probe": 0.7773148148148148
+      },
+      "ood_only_novel_report": 0.07970794037115911,
+      "softmax_only_novel_report": 0.7514450867052023,
+      "species": {
+        "cattle_as_cattle": 0.9967266775777414,
+        "buffalo_as_buffalo": 1.0
+      },
+      "config": {
+        "normalise": false,
+        "extra": false
+      },
+      "k": 512,
+      "ood_auroc_val": 0.969862717475299,
+      "other_val_rejection": 0.9777587681779298,
+      "eligible": true
+    },
+    "B": {
+      "D": 1328.2135028374355,
+      "T": 0.9,
+      "retention": {
+        "cattle_test": 0.9950900163666121,
+        "buffalo_test": 1.0,
+        "lesion_positive_test": 0.9975247524752475,
+        "mild_test": 1.0
+      },
+      "rejection": {
+        "novel_select": 0.8554983338382308,
+        "novel_report": 0.836629145117128,
+        "novel_report_by_source": {
+          "caltech_novel": 0.9234972677595629,
+          "faces": 0.9979959919839679,
+          "scenes": 0.7093563370935634
+        },
+        "other_test": 0.9782534828406388,
+        "dtd_farm_test": 0.8717201166180758,
+        "lesionlike_probe": 0.8634259259259259
+      },
+      "ood_only_novel_report": 0.46364466078491023,
+      "softmax_only_novel_report": 0.7514450867052023,
+      "species": {
+        "cattle_as_cattle": 0.9967266775777414,
+        "buffalo_as_buffalo": 1.0
+      },
+      "config": {
+        "normalise": true,
+        "extra": false
+      },
+      "k": 512,
+      "ood_auroc_val": 0.996171226320593,
+      "other_val_rejection": 0.9777587681779298,
+      "eligible": true
+    },
+    "C": {
+      "D": 1628.4459277500152,
+      "T": 0.95,
+      "retention": {
+        "cattle_test": 0.9934533551554828,
+        "buffalo_test": 1.0,
+        "lesion_positive_test": 0.995049504950495,
+        "mild_test": 1.0
+      },
+      "rejection": {
+        "novel_select": 0.8306573765525598,
+        "novel_report": 0.8311530270763614,
+        "novel_report_by_source": {
+          "caltech_novel": 0.9086651053864169,
+          "faces": 0.9919839679358717,
+          "scenes": 0.7120106171201062
+        },
+        "other_test": 0.9690791709140333,
+        "dtd_farm_test": 0.9577259475218659,
+        "lesionlike_probe": 0.9388888888888889
+      },
+      "ood_only_novel_report": 0.07970794037115911,
+      "softmax_only_novel_report": 0.8287191968360207,
+      "species": {
+        "cattle_as_cattle": 0.9983633387888707,
+        "buffalo_as_buffalo": 1.0
+      },
+      "config": {
+        "normalise": false,
+        "extra": true
+      },
+      "k": 512,
+      "ood_auroc_val": 0.969862717475299,
+      "other_val_rejection": NaN,
+      "eligible": true
+    },
+    "D": {
+      "D": 1328.2135028374355,
+      "T": 0.95,
+      "retention": {
+        "cattle_test": 0.9950900163666121,
+        "buffalo_test": 1.0,
+        "lesion_positive_test": 0.995049504950495,
+        "mild_test": 1.0
+      },
+      "rejection": {
+        "novel_select": 0.8851863071796425,
+        "novel_report": 0.8773958016428354,
+        "novel_report_by_source": {
+          "caltech_novel": 0.9117876658860266,
+          "faces": 0.9919839679358717,
+          "scenes": 0.8102189781021898
+        },
+        "other_test": 0.9690791709140333,
+        "dtd_farm_test": 0.9664723032069971,
+        "lesionlike_probe": 0.9490740740740741
+      },
+      "ood_only_novel_report": 0.46364466078491023,
+      "softmax_only_novel_report": 0.8287191968360207,
+      "species": {
+        "cattle_as_cattle": 0.9983633387888707,
+        "buffalo_as_buffalo": 1.0
+      },
+      "config": {
+        "normalise": true,
+        "extra": true
+      },
+      "k": 512,
+      "ood_auroc_val": 0.996171226320593,
+      "other_val_rejection": NaN,
+      "eligible": true
+    }
+  },
+  "chosen_thresholds": {
+    "oodMax": 1328.2135028374355,
+    "otherMax": 0.95,
+    "k": 512,
+    "normalise": true
+  },
+  "verification": {
+    "lesion_fp32_vs_keras": 2.205371856689453e-06,
+    "lesion_confusion_fp32": {
+      "tp": 389,
+      "tn": 177,
+      "fp": 30,
+      "fn": 15
+    },
+    "lesion_confusion_fp16": {
+      "tp": 389,
+      "tn": 177,
+      "fp": 30,
+      "fn": 15
+    },
+    "ood_fp32_vs_numpy_max_rel": 2.3153279448348245e-06,
+    "ood_fp16_vs_fp32_max_rel": 0.01197766702487294,
+    "cattle_test_kept_fp16": 0.9950900163666121,
+    "novel_report_rejected_fp16": 0.8780042592029206
+  },
+  "sizes": {
+    "fp32": 15503842,
+    "fp16": 7846795
+  },
+  "masks": {
+    "cattle_test": 611,
+    "buffalo_test": 81,
+    "lesion_test": 404,
+    "mild_test": 47,
+    "cattle_val": 245,
+    "buffalo_val": 24,
+    "lesion_val": 164,
+    "other_test": 2943,
+    "dtd_farm_test": 686,
+    "lesionlike": 2160,
+    "novel_select": 3301,
+    "novel_report": 3287
+  },
+  "dtd_farm_classes": [
+    "banded",
+    "braided",
+    "chequered",
+    "cobwebbed",
+    "cracked",
+    "crosshatched",
+    "fibrous",
+    "gauzy",
+    "grid",
+    "grooved",
+    "interlaced",
+    "knitted",
+    "lacelike",
+    "lined",
+    "marbled",
+    "matted",
+    "meshed",
+    "paisley",
+    "perforated",
+    "potholed",
+    "smeared",
+    "spiralled",
+    "stained",
+    "stratified",
+    "striped",
+    "swirly",
+    "waffled",
+    "woven",
+    "zigzagged"
+  ],
+  "dtd_lesionlike_classes_never_trained": [
+    "blotchy",
+    "bubbly",
+    "bumpy",
+    "crystalline",
+    "dotted",
+    "flecked",
+    "freckled",
+    "frilly",
+    "honeycombed",
+    "pitted",
+    "pleated",
+    "polka-dotted",
+    "porous",
+    "scaly",
+    "sprinkled",
+    "studded",
+    "veined",
+    "wrinkled"
+  ]
+}

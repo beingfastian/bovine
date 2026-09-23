@@ -1,23 +1,17 @@
 {
-  "thresholdsVersion": "2026-09-23b",
+  "thresholdsVersion": "2026-09-24-armD",
   "_comment": "Every value here was measured, not chosen. See ai/reports/onnx_verification.json and ai/reports/gate_report.json for the sweeps these came from. Editing this file retunes the deployed app without a code change.",
-
   "tau": 0.5,
   "_tau": "Shipped operating point from MODEL_CARD.md section 5. Selected on the Mild-recall curve, not on balanced accuracy: 0.50 buys +4.5 points of early-case recall for 1.8 points of specificity. Do not raise it without re-reading that section.",
-
   "unclearLow": 0.4,
   "unclearHigh": 0.6,
   "_unclear": "Dead-band routed to 'unclear'. Measured on the 611-image locked test split: abstains on 2.9% of photos, and on the ones still decided lifts recall 0.9629 -> 0.9746 and specificity 0.8551 -> 0.8593. Ten positives fall in the band; they are told to consult a vet anyway, so the safety action is unchanged.",
-
-  "otherMax": 0.8,
-  "_otherMax": "Gate 1, softmax half: reject when P(other) >= this. Trained against ~85 negative categories (natural-images, real hand photos, 70% of Caltech-101 classes). Held-out species: cattle->cattle 0.9967, buffalo->buffalo 1.0000, other->other 0.9885. On categories never trained on it rejects ~80% at T=0.7 and ~67% at T=0.9 alone. 0.8 rather than 0.7 because the joint gate at 0.7 kept only 98.5% of the 611 held-out cattle; at 0.8 it keeps 99.0%. The 6 cattle still turned away were inspected: ai/reports/gate_rejected_cattle_inspection.json.",
-
-  "oodMax": 746.1,
-  "_oodMax": "Gate 1, open-set half: reject when the Mahalanobis d^2 (PCA k=384) of the photo features from the bovine training distribution is >= this. 746.1 = 99.5th percentile of held-out cattle d^2 (buffalo 100% under it). Held-out AUROC non-animal vs animal 0.956. ALONE this half rejects only 29% of 6,588 never-trained-on non-animal photos at this retention (weakest on faces, 8%); its job is the high-resolution landscape case the softmax misses -- the softmax alone passed 20/20 real landscapes as cattle before the negative set was broadened, and still misses 2/12 here that this half catches. Combined with otherMax=0.8 the gate rejects 78.4% of the novel set while keeping cattle 0.9902 / buffalo 1.0000 (ai/reports/gate_report.json, kernel v7). Field rows store d^2 raw so this can be retuned without re-running anything.",
-
+  "otherMax": 0.95,
+  "_otherMax": "Gate 1, softmax half (arm D, ai/reports/gate_arms_report.json): reject when P(other) >= this. Negatives now include 29 farm/built-environment DTD textures; 18 lesion-like textures (bumpy, pitted, studded, scaly...) are never trained on. Chosen on a validation carve-out, not the test split.",
+  "oodMax": 1328.2,
+  "_oodMax": "Gate 1, open-set half (arm D): Mahalanobis d^2 on l2-NORMALISED features (Mahalanobis++), PCA k=512, chosen on validation. Validation AUROC 0.996 (unnormalised: 0.970). Combined gate on the held-out report half of 6,588 never-trained-on non-animal photos: 87.7% rejected (previous gate method, same split: 75.6%). Locked test retention: cattle 0.9951, diseased cattle 0.9950, mild cases 1.000, buffalo 1.000. Local: 12/12 real landscapes rejected.",
   "blurVarianceMin": 120.0,
   "_blur": "Variance of the Laplacian on the 224x224 model input. 120 is the 0.5th percentile of the locked test split (min 20, median 969), so it rejects only genuinely unusable photos. Nine field photos from 2026-09-21/22 all passed it. Retune from the field distribution once there are a few hundred.",
-
   "clippedFractionMax": 0.35,
   "_clipped": "Fraction of pixels crushed to black (luma <= 4) or blown to white (luma >= 251). 0.35 flags 1.8% of test images on the bright side and 0.2% on the dark side. Deliberately permissive: a marginal photo is still worth collecting, it just should not get a confident verdict."
 }

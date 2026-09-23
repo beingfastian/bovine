@@ -1,0 +1,51 @@
+1: start
+1: tf 2.20.0 keras 3.13.2 gpus [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU'), PhysicalDevice(name='/physical_device:GPU:1', device_type='GPU')]
+2: installs ok
+3: inference rebuild == original (max diff 1.2e-07)
+4: dataset roots {"natural-images": "/kaggle/input/datasets/prasunroy/natural-images", "rock-paper-scissors": "/kaggle/input/datasets/adilshamim8/rock-paper-scissors", "caltech-101": "/kaggle/input/datasets/imbikramsaha/caltech-101", "intel-image-classification": "/kaggle/input/datasets/puneet6060/intel-image-classification", "lfw-dataset": "/kaggle/input/datasets/jessicali9530/lfw-dataset", "describable-textures-dataset-dtd": "/kaggle/input/datasets/jmexpert/describable-textures-dataset-dtd"}
+4: cattle 3030 buffalo 323 natural 6899 hands 1500 caltech 9144 scenes 3000 faces 1000 dtd 5640 (farm classes 29, lesion-like 18)
+4: splits {"0/test": 611, "0/train": 2174, "0/val": 245, "1/test": 81, "1/train": 218, "1/val": 24, "2/novel_report": 3287, "2/novel_select": 3301, "2/probe": 2160, "2/test": 3629, "2/train": 13387, "2/val": 1419}
+5: 64/30536  17s
+5: 3264/30536  66s
+5: 6464/30536  116s
+5: 9664/30536  165s
+5: 12864/30536  217s
+5: 16064/30536  255s
+5: 19264/30536  293s
+5: 22464/30536  334s
+5: 25664/30536  380s
+5: 28864/30536  430s
+5: features (30536, 960) in 461s (unreadable dropped: 0)
+5: masks {"cattle_test": 611, "buffalo_test": 81, "lesion_test": 404, "mild_test": 47, "cattle_val": 245, "buffalo_val": 24, "lesion_val": 164, "other_test": 2943, "dtd_farm_test": 686, "lesionlike": 2160, "novel_select": 3301, "novel_report": 3287}
+5: SHIPPED lesion model flags as 'possible condition': novel_report 12.2%, lesion-like textures 48.3%
+6: machinery ready
+7: heads trained
+   ood normalise=False k=128 AUROC(val)=0.8098
+   ood normalise=False k=256 AUROC(val)=0.9140
+   ood normalise=False k=384 AUROC(val)=0.9501
+   ood normalise=False k=512 AUROC(val)=0.9699
+   ood normalise=True k=128 AUROC(val)=0.9549
+   ood normalise=True k=256 AUROC(val)=0.9909
+   ood normalise=True k=384 AUROC(val)=0.9953
+   ood normalise=True k=512 AUROC(val)=0.9962
+7: ood fits done
+7: arm A  D=1628.4 T=0.9  keep cattle 0.9951 buffalo 1.0000 lesion+ 0.9975 mild 1.0000 | reject novel_select 0.7640 novel_report 0.7557 lesionlike 0.7773 | eligible True
+7: arm B  D=1328.2 T=0.9  keep cattle 0.9951 buffalo 1.0000 lesion+ 0.9975 mild 1.0000 | reject novel_select 0.8555 novel_report 0.8366 lesionlike 0.8634 | eligible True
+7: arm C  D=1628.4 T=0.95  keep cattle 0.9935 buffalo 1.0000 lesion+ 0.9950 mild 1.0000 | reject novel_select 0.8307 novel_report 0.8312 lesionlike 0.9389 | eligible True
+7: arm D  D=1328.2 T=0.95  keep cattle 0.9951 buffalo 1.0000 lesion+ 0.9950 mild 1.0000 | reject novel_select 0.8852 novel_report 0.8774 lesionlike 0.9491 | eligible True
+7: CHOICE = D  (beats A by >1 point on novel_select; fewest changes within 1 point of best)
+8: combined arm D built; d2 in-graph vs numpy rel err 2.06e-07
+8: exported fp32 15.50 MB, fp16 7.85 MB
+9: cattle test 150/611
+9: cattle test 300/611
+9: cattle test 450/611
+9: cattle test 600/611
+9: {"lesion_fp32_vs_keras": 2.205371856689453e-06, "lesion_confusion_fp32": {"tp": 389, "tn": 177, "fp": 30, "fn": 15}, "lesion_confusion_fp16": {"tp": 389, "tn": 177, "fp": 30, "fn": 15}, "ood_fp32_vs_numpy_max_rel": 2.3153279448348245e-06, "ood_fp16_vs_fp32_max_rel": 0.01197766702487294, "cattle_test_kept_fp16": 0.9950900163666121}
+9: novel_report 500/3287
+9: novel_report 1000/3287
+9: novel_report 1500/3287
+9: novel_report 2000/3287
+9: novel_report 2500/3287
+9: novel_report 3000/3287
+9: novel_report rejected through the fp16 file: 0.8780
+10: arms_report.json written; outputs ['arms_report.json', 'bi-lsd-mnv3l-v1.0.0-gate-D.fp16.onnx', 'bi-lsd-mnv3l-v1.0.0-gate-D.onnx', 'progress.txt', 'tf2onnx.log']

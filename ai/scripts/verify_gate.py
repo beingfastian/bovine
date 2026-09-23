@@ -34,9 +34,15 @@ import onnxruntime as ort
 from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT_DIR = ROOT / "ai/kernels/bovine-lsd-gate/out"
-NEW32 = OUT_DIR / "bi-lsd-mnv3l-v1.0.0-gate.onnx"
-NEW16 = OUT_DIR / "bi-lsd-mnv3l-v1.0.0-gate.fp16.onnx"
+import os
+# Override with GATE_OUT / GATE_TAG to verify another run's artifact, and
+# GATE_OOD_MAX / GATE_OTHER_MAX to CHECK fixed thresholds instead of choosing.
+OUT_DIR = Path(os.environ.get("GATE_OUT", ROOT / "ai/kernels/bovine-lsd-gate/out"))
+TAG = os.environ.get("GATE_TAG", "bi-lsd-mnv3l-v1.0.0-gate")
+NEW32 = OUT_DIR / f"{TAG}.onnx"
+NEW16 = OUT_DIR / f"{TAG}.fp16.onnx"
+FIXED_OOD = float(os.environ["GATE_OOD_MAX"]) if "GATE_OOD_MAX" in os.environ else None
+FIXED_T = float(os.environ["GATE_OTHER_MAX"]) if "GATE_OTHER_MAX" in os.environ else None
 OLD32 = ROOT / "ai/models/bi-lsd-mnv3l-v1.0.0/bi-lsd-mnv3l-v1.0.0.onnx"
 OLD16 = ROOT / "ai/models/bi-lsd-mnv3l-v1.0.0/bi-lsd-mnv3l-v1.0.0.fp16.onnx"
 GATE_REPORT = OUT_DIR / "gate_report.json"
@@ -201,6 +207,13 @@ def main() -> None:
     gate = json.loads(GATE_REPORT.read_text(encoding="utf-8")) if GATE_REPORT.exists() else {}
     ood_sweep = (gate.get("ood") or {}).get("sweep")
     chosen_ood = None
+    if FIXED_OOD is not None:
+        # Thresholds were chosen elsewhere (on validation data). Check, do not choose.
+        gate, ood_sweep = {}, None
+        kc = float((D16 < FIXED_OOD).mean()); kb = float((Bd < FIXED_OOD).mean())
+        report["ood_gate"] = {"recommendedOodMax": FIXED_OOD, "source": "fixed (GATE_OOD_MAX)",
+                              "local_cattle_test_kept": kc, "local_buffalo_kept": kb}
+        print(f"  FIXED oodMax {FIXED_OOD:.2f}: local cattle test kept {kc:.4f}, local buffalo kept {kb:.4f}")
     if not ood_sweep and gate:
         # The kernel's D values only reached stdout. Rebuild the sweep the way
         # the kernel defined it -- D = max(pct(cattle test d2), pct(buffalo d2))
@@ -238,8 +251,9 @@ def main() -> None:
                   f"local buffalo kept {local_buf_kept:.4f}")
             report["ood_gate"] = {"recommendedOodMax": chosen_ood["D"], "at_threshold": chosen_ood,
                                   "local_cattle_test_kept": local_ood_kept, "local_buffalo_kept": local_buf_kept}
-    sweep = (gate.get("head") or {}).get("softmax_only_sweep") or gate.get("gate_sweep")
-    chosen = None
+    sweep = None if FIXED_T is not None else ((gate.get("head") or {}).get("softmax_only_sweep") or gate.get("gate_sweep"))
+    chosen = {"T": FIXED_T, "cattle_kept": float((S16[:, 2] < FIXED_T).mean()),
+              "buffalo_kept": float((B[:, 2] < FIXED_T).mean()), "other_rejected": None} if FIXED_T is not None else None
     if sweep:
         print("\n  softmax P(other) half:")
         print("  (held-out numbers from the kernel)")
@@ -255,7 +269,7 @@ def main() -> None:
         if chosen is None:
             chosen = max(sweep, key=lambda r: r["T"])
             print(f"  no threshold keeps >= {KEEP_MIN} of both species; falling back to loosest T={chosen['T']}")
-    else:
+    elif chosen is None:
         # No kernel report on disk. Choose PROVISIONALLY from what is clean
         # locally: the cattle test split (never seen by the head) and the
         # buffalo set (caveated). No non-animal held-out here, so the rejection
@@ -275,7 +289,15 @@ def main() -> None:
             chosen = {"T": 0.95, "cattle_kept": float((S16[:, 2] < 0.95).mean()),
                       "buffalo_kept": float((B[:, 2] < 0.95).mean()), "other_rejected": None}
     # local check of the same T on the cattle test split
-    local_kept = float((S16[:, 2] < chosen["T"]).mean())
+    Dfix = (report.get("ood_gate") or {}).get("recommendedOodMax", float("inf"))
+    joint_c = ~((D16 >= Dfix) | (S16[:, 2] >= chosen["T"]))
+    joint_b = ~((Bd >= Dfix) | (B[:, 2] >= chosen["T"]))
+    report["joint_retention_local"] = {"cattle_test": float(joint_c.mean()),
+                                       "lesion_positive_cattle_test": float(joint_c[y == 1].mean()),
+                                       "buffalo_pak": float(joint_b.mean())}
+    print(f"  JOINT retention (both halves): cattle {joint_c.mean():.4f}  "
+          f"lesion-positive cattle {joint_c[y == 1].mean():.4f}  buffalo {joint_b.mean():.4f}")
+    local_kept = float(joint_c.mean())
     rej_txt = (f"rejects {chosen['other_rejected']:.1%} of held-out non-animals"
                if chosen.get("other_rejected") is not None else "non-animal rejection rate not yet measured")
     print(f"\n  recommended otherMax = {chosen['T']}   ({rej_txt}; "
@@ -316,7 +338,9 @@ def main() -> None:
         ("species fp16/fp32 argmax agreement >= 0.99",
          report["cattle_test_species"]["fp16_vs_fp32_argmax_agreement"] >= 0.99),
         ("ood fp16/fp32 max rel err < 2%", report["cattle_test_ood"]["fp16_vs_fp32_max_rel_err"] < 0.02),
-        ("ood threshold chosen from a held-out sweep", "ood_gate" in report),
+        ("ood threshold chosen from a held-out sweep or fixed by the kernel", "ood_gate" in report),
+        ("lesion-positive cattle kept by the joint gate >= 0.99",
+         report.get("joint_retention_local", {}).get("lesion_positive_cattle_test", 0) >= KEEP_MIN),
         ("local buffalo kept by ood gate >= 0.99",
          (report.get("ood_gate") or {}).get("local_buffalo_kept", 0) >= KEEP_MIN),
         ("real non-animal photos on this machine: >= 90% rejected",

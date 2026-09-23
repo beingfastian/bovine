@@ -68,6 +68,13 @@ export function LimitsBanner({ species }: { species: "cattle" | "buffalo" | null
             on advanced ones.
           </li>
           <li>
+            <strong>Most animals it flags will turn out to be fine.</strong> At
+            the disease levels typical on a farm, roughly one flagged animal in
+            three or four actually has a skin condition. That is how screening
+            works — the point is not to miss the one that does. A flag means
+            &ldquo;worth a vet&rsquo;s look&rdquo;, nothing more.
+          </li>
+          <li>
             It looks at one photograph. It knows nothing about the animal&apos;s
             history, temperature, appetite or herd.
           </li>
